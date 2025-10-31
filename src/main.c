@@ -1,5 +1,5 @@
 #include <stdio.h>
 
-int main() {
-	printf("Hello world!\n");
+__declspec(dllexport)
+void update_and_render() {
 }

@@ -1,3 +1,3 @@
 @echo off
 
-start build\pixel_tracer
+start build\win32_pixel_tracer
