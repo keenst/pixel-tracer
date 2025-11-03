@@ -15,6 +15,12 @@ PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
 PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
 PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
 PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR;
+PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
+PFN_vkCreateImageView vkCreateImageView;
+PFN_vkCreateShaderModule vkCreateShaderModule;
+PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
+PFN_vkCreateRenderPass vkCreateRenderPass;
+PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
 
 u32 u32_clamp(u32 min, u32 value, u32 max) {
 	if (value > max) {
@@ -51,6 +57,12 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	vkGetPhysicalDeviceSurfacePresentModesKHR = (PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceSurfacePresentModesKHR");
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR = (PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
 	vkCreateSwapchainKHR = (PFN_vkCreateSwapchainKHR)GetProcAddress(vulkan_dll, "vkCreateSwapchainKHR");
+	vkGetSwapchainImagesKHR = (PFN_vkGetSwapchainImagesKHR)GetProcAddress(vulkan_dll, "vkGetSwapchainImagesKHR");
+	vkCreateImageView = (PFN_vkCreateImageView)GetProcAddress(vulkan_dll, "vkCreateImageView");
+	vkCreateShaderModule = (PFN_vkCreateShaderModule)GetProcAddress(vulkan_dll, "vkCreateShaderModule");
+	vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)GetProcAddress(vulkan_dll, "vkCreatePipelineLayout");
+	vkCreateRenderPass = (PFN_vkCreateRenderPass)GetProcAddress(vulkan_dll, "vkCreateRenderPass");
+	vkCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)GetProcAddress(vulkan_dll, "vkCreateGraphicsPipelines");
 
 	// List extensions and layers
 	const char* enabled_layers[] = {
@@ -240,15 +252,14 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 
 	// Query surface capabilities
 	u32 surface_format_count;
-	VkResult res;
-	res = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, NULL);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, NULL);
 	VkSurfaceFormatKHR surface_formats[surface_format_count];
-	res = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, surface_formats);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, surface_formats);
 
 	u32 present_mode_count;
-	res = vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, NULL);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, NULL);
 	VkPresentModeKHR present_modes[present_mode_count];
-	res = vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, present_modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, present_modes);
 
 	// Create swapchain
 	VkSurfaceFormatKHR chosen_format;
@@ -322,6 +333,207 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkSwapchainKHR swapchain;
 	if (vkCreateSwapchainKHR(device, &swapchain_create_info, NULL, &swapchain) != VK_SUCCESS) {
 		printf("Was unable to create swap chain\n");
+		return;
+	}
+
+	u32 image_count;
+	vkGetSwapchainImagesKHR(device, swapchain, &image_count, NULL);
+	VkImage swapchain_images[image_count];
+	vkGetSwapchainImagesKHR(device, swapchain, &image_count, swapchain_images);
+
+	// Create image views
+	VkImageView swapchain_image_views[image_count];
+
+	FOR(image_index, image_count) {
+		VkImageViewCreateInfo image_view_create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = swapchain_images[image_index],
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = chosen_format.format,
+			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+			.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = 1,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1
+		};
+
+		if (vkCreateImageView(device, &image_view_create_info, NULL, &swapchain_image_views[image_index]) != VK_SUCCESS) {
+			printf("Unable to create image view %i\n", image_index);
+			return;
+		}
+	}
+
+	// Load shaders
+	u32 shader_code_size;
+	char* shader_code = win32_read_file("data/shaders/triangle.spv", &shader_code_size);
+
+	VkShaderModuleCreateInfo shader_create_info = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = shader_code_size,
+		.pCode = (uint32_t*)shader_code
+	};
+
+	VkShaderModule shader_module;
+	vkCreateShaderModule(device, &shader_create_info, NULL, &shader_module);
+
+	VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_VERTEX_BIT,
+		.module = shader_module,
+		.pName = "vertexMain"
+	};
+
+	VkPipelineShaderStageCreateInfo fragment_shader_stage_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.module = shader_module,
+		.pName = "fragmentMain"
+	};
+
+	VkPipelineShaderStageCreateInfo shader_stages[] = { vertex_shader_stage_create_info, fragment_shader_stage_create_info };
+
+	VkDynamicState dynamic_states[] = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+
+	VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		.dynamicStateCount = sizeof(dynamic_states) / sizeof(VkDynamicState),
+		.pDynamicStates = dynamic_states
+	};
+
+	VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+	};
+
+	VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		.primitiveRestartEnable = VK_FALSE
+	};
+
+	VkViewport viewport = {
+		.x = 0,
+		.y = 0,
+		.width = (float)swap_extent.width,
+		.height = (float)swap_extent.height,
+		.minDepth = 0,
+		.maxDepth = 1
+	};
+
+	VkRect2D scissor = {
+		.offset = { 0, 0 },
+		.extent = swap_extent
+	};
+
+	VkPipelineViewportStateCreateInfo viewport_state_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		.viewportCount = 1,
+		.pViewports = &viewport,
+		.scissorCount = 1,
+		.pScissors = &scissor
+	};
+
+	VkPipelineRasterizationStateCreateInfo rasterizer_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		.depthClampEnable = VK_FALSE,
+		.rasterizerDiscardEnable = VK_FALSE,
+		.polygonMode = VK_POLYGON_MODE_FILL,
+		.lineWidth = 1.0f,
+		.cullMode = VK_CULL_MODE_BACK_BIT,
+		.frontFace = VK_FRONT_FACE_CLOCKWISE,
+	};
+
+	VkPipelineMultisampleStateCreateInfo multisampling_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		.sampleShadingEnable = VK_FALSE,
+		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+		.minSampleShading = 1.0f
+	};
+
+	VkPipelineColorBlendAttachmentState color_blend_attachment = {
+		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+		.blendEnable = VK_FALSE,
+	};
+
+	VkPipelineColorBlendStateCreateInfo color_blend_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		.logicOpEnable = VK_FALSE,
+		.attachmentCount = 1,
+		.pAttachments = &color_blend_attachment
+	};
+
+	VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+	};
+
+	VkPipelineLayout pipeline_layout;
+	if (vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout) != VK_SUCCESS) {
+		printf("Unable to create pipeline layout\n");
+		return;
+	}
+
+	VkAttachmentDescription color_attachment = {
+		.format = chosen_format.format,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	};
+
+	VkAttachmentReference color_attachment_ref = {
+		.attachment = 0,
+		.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
+	};
+
+	VkSubpassDescription subpass = {
+		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &color_attachment_ref
+	};
+
+	VkRenderPassCreateInfo render_pass_create_info = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+		.attachmentCount = 1,
+		.pAttachments = &color_attachment,
+		.subpassCount = 1,
+		.pSubpasses = &subpass
+	};
+
+	VkRenderPass render_pass;
+	if (vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass) != VK_SUCCESS) {
+		printf("Unable to create render pass\n");
+		return;
+	}
+
+	VkGraphicsPipelineCreateInfo pipeline_create_info = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.stageCount = 2,
+		.pStages = shader_stages,
+		.pVertexInputState = &vertex_input_state_create_info,
+		.pInputAssemblyState = &input_assembly_create_info,
+		.pViewportState = &viewport_state_create_info,
+		.pRasterizationState = &rasterizer_create_info,
+		.pMultisampleState = &multisampling_create_info,
+		.pDepthStencilState = NULL,
+		.pColorBlendState = &color_blend_create_info,
+		.pDynamicState = &dynamic_state_create_info,
+		.layout = pipeline_layout,
+		.renderPass = render_pass,
+		.subpass = 0,
+		.basePipelineHandle = VK_NULL_HANDLE,
+		.basePipelineIndex = -1
+	};
+
+	VkPipeline graphics_pipeline;
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &graphics_pipeline) != VK_SUCCESS) {
+		printf("Unable to create graphics pipeline\n");
 		return;
 	}
 

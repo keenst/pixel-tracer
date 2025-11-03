@@ -32,4 +32,7 @@ echo ]>> ..\compile_commands.json
 del win32_compile_commands.json
 del app_compile_commands.json
 
+:: shaders
+slangc ..\src\triangle.slang -target spirv -o ..\data\shaders\triangle.spv
+
 cd ..

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <fileapi.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -12,4 +13,5 @@
 #define FOR(i, n) for(uint32_t i = 0; i < n; i++)
 
 #include "types.h"
+#include "win32_io.c"
 #include "win32_vulkan.c"
