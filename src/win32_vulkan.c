@@ -21,6 +21,45 @@ PFN_vkCreateShaderModule vkCreateShaderModule;
 PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
 PFN_vkCreateRenderPass vkCreateRenderPass;
 PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
+PFN_vkCreateFramebuffer vkCreateFramebuffer;
+PFN_vkCreateCommandPool vkCreateCommandPool;
+PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
+PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
+PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass;
+PFN_vkCmdBindPipeline vkCmdBindPipeline;
+PFN_vkCmdSetViewport vkCmdSetViewport;
+PFN_vkCmdSetScissor vkCmdSetScissor;
+PFN_vkCmdDraw vkCmdDraw;
+PFN_vkCmdEndRenderPass vkCmdEndRenderPass;
+PFN_vkEndCommandBuffer vkEndCommandBuffer;
+PFN_vkCreateSemaphore vkCreateSemaphore;
+PFN_vkCreateFence vkCreateFence;
+PFN_vkWaitForFences vkWaitForFences;
+PFN_vkResetFences vkResetFences;
+PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
+PFN_vkResetCommandBuffer vkResetCommandBuffer;
+PFN_vkQueueSubmit vkQueueSubmit;
+PFN_vkQueuePresentKHR vkQueuePresentKHR;
+
+typedef struct {
+	VkDevice device;
+	VkSwapchainKHR swapchain;
+	VkFramebuffer* framebuffers;
+	VkCommandBuffer command_buffer;
+	VkPipeline graphics_pipeline;
+	VkQueue graphics_queue;
+	VkQueue present_queue;
+
+	VkViewport viewport;
+	VkRect2D scissor;
+
+	VkCommandBufferBeginInfo command_buffer_begin_info;
+	VkRenderPassBeginInfo render_pass_begin_info;
+
+	VkSemaphore image_available_semaphore;
+	VkSemaphore render_finished_semaphore;
+	VkFence in_flight_fence;
+} VulkanState;
 
 u32 u32_clamp(u32 min, u32 value, u32 max) {
 	if (value > max) {
@@ -34,12 +73,12 @@ u32 u32_clamp(u32 min, u32 value, u32 max) {
 	return value;
 }
 
-void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 window_height) {
+VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 window_height) {
 	// Load functions
 	HMODULE vulkan_dll = LoadLibrary("vulkan-1");
 	if (vulkan_dll == NULL) {
 		printf("Failed to load vulkan dll\n");
-		return;
+		return (VulkanState){};
 	}
 
 	vkCreateInstance = (PFN_vkCreateInstance)GetProcAddress(vulkan_dll, "vkCreateInstance");
@@ -63,6 +102,25 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)GetProcAddress(vulkan_dll, "vkCreatePipelineLayout");
 	vkCreateRenderPass = (PFN_vkCreateRenderPass)GetProcAddress(vulkan_dll, "vkCreateRenderPass");
 	vkCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)GetProcAddress(vulkan_dll, "vkCreateGraphicsPipelines");
+	vkCreateFramebuffer = (PFN_vkCreateFramebuffer)GetProcAddress(vulkan_dll, "vkCreateFramebuffer");
+	vkCreateCommandPool = (PFN_vkCreateCommandPool)GetProcAddress(vulkan_dll, "vkCreateCommandPool");
+	vkAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)GetProcAddress(vulkan_dll, "vkAllocateCommandBuffers");
+	vkBeginCommandBuffer = (PFN_vkBeginCommandBuffer)GetProcAddress(vulkan_dll, "vkBeginCommandBuffer");
+	vkCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)GetProcAddress(vulkan_dll, "vkCmdBeginRenderPass");
+	vkCmdBindPipeline = (PFN_vkCmdBindPipeline)GetProcAddress(vulkan_dll, "vkCmdBindPipeline");
+	vkCmdSetViewport = (PFN_vkCmdSetViewport)GetProcAddress(vulkan_dll, "vkCmdSetViewport");
+	vkCmdSetScissor = (PFN_vkCmdSetScissor)GetProcAddress(vulkan_dll, "vkCmdSetScissor");
+	vkCmdDraw = (PFN_vkCmdDraw)GetProcAddress(vulkan_dll, "vkCmdDraw");
+	vkCmdEndRenderPass = (PFN_vkCmdEndRenderPass)GetProcAddress(vulkan_dll, "vkCmdEndRenderPass");
+	vkEndCommandBuffer = (PFN_vkEndCommandBuffer)GetProcAddress(vulkan_dll, "vkEndCommandBuffer");
+	vkCreateSemaphore = (PFN_vkCreateSemaphore)GetProcAddress(vulkan_dll, "vkCreateSemaphore");
+	vkCreateFence = (PFN_vkCreateFence)GetProcAddress(vulkan_dll, "vkCreateFence");
+	vkWaitForFences = (PFN_vkWaitForFences)GetProcAddress(vulkan_dll, "vkWaitForFences");
+	vkResetFences = (PFN_vkResetFences)GetProcAddress(vulkan_dll, "vkResetFences");
+	vkAcquireNextImageKHR = (PFN_vkAcquireNextImageKHR)GetProcAddress(vulkan_dll, "vkAcquireNextImageKHR");
+	vkResetCommandBuffer = (PFN_vkResetCommandBuffer)GetProcAddress(vulkan_dll, "vkResetCommandBuffer");
+	vkQueueSubmit = (PFN_vkQueueSubmit)GetProcAddress(vulkan_dll, "vkQueueSubmit");
+	vkQueuePresentKHR = (PFN_vkQueuePresentKHR)GetProcAddress(vulkan_dll, "vkQueuePresentKHR");
 
 	// List extensions and layers
 	const char* enabled_layers[] = {
@@ -102,7 +160,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkInstance vk_instance;
 	if (vkCreateInstance(&create_info, NULL, &vk_instance) != VK_SUCCESS) {
 		printf("Failed to create vulkan instance\n");
-		return;
+		return (VulkanState){};
 	}
 
 	// Create surface
@@ -115,7 +173,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkSurfaceKHR surface;
 	if (vkCreateWin32SurfaceKHR(vk_instance, &surface_create_info, NULL, &surface) != VK_SUCCESS) {
 		printf("Failed to create surface\n");
-		return;
+		return (VulkanState){};
 	}
 
 	// Print available layers
@@ -203,17 +261,17 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 
 	if (!found_all_extensions) {
 		printf("No device that supports all required extensions found\n");
-		return;
+		return (VulkanState){};
 	}
 
 	if (!found_graphics_family) {
 		printf("No queue family that supports graphics and compute found\n");
-		return;
+		return (VulkanState){};
 	}
 
 	if (!found_present_family) {
 		printf("No queue family that supports presenting to surface found\n");
-		return;
+		return (VulkanState){};
 	}
 
 	// Create logical device
@@ -247,7 +305,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkDevice device;
 	if (vkCreateDevice(physical_device, &device_create_info, NULL, &device) != VK_SUCCESS) {
 		printf("Failed to create logical device\n");
-		return;
+		return (VulkanState){};
 	}
 
 	// Query surface capabilities
@@ -333,7 +391,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkSwapchainKHR swapchain;
 	if (vkCreateSwapchainKHR(device, &swapchain_create_info, NULL, &swapchain) != VK_SUCCESS) {
 		printf("Was unable to create swap chain\n");
-		return;
+		return (VulkanState){};
 	}
 
 	u32 image_count;
@@ -343,6 +401,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 
 	// Create image views
 	VkImageView swapchain_image_views[image_count];
+	u32 swapchain_image_view_count = image_count;
 
 	FOR(image_index, image_count) {
 		VkImageViewCreateInfo image_view_create_info = {
@@ -363,7 +422,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 
 		if (vkCreateImageView(device, &image_view_create_info, NULL, &swapchain_image_views[image_index]) != VK_SUCCESS) {
 			printf("Unable to create image view %i\n", image_index);
-			return;
+			return (VulkanState){};
 		}
 	}
 
@@ -396,6 +455,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 
 	VkPipelineShaderStageCreateInfo shader_stages[] = { vertex_shader_stage_create_info, fragment_shader_stage_create_info };
 
+	// Create pipeline
 	VkDynamicState dynamic_states[] = {
 		VK_DYNAMIC_STATE_VIEWPORT,
 		VK_DYNAMIC_STATE_SCISSOR
@@ -475,7 +535,7 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkPipelineLayout pipeline_layout;
 	if (vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout) != VK_SUCCESS) {
 		printf("Unable to create pipeline layout\n");
-		return;
+		return (VulkanState){};
 	}
 
 	VkAttachmentDescription color_attachment = {
@@ -498,18 +558,29 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 		.pColorAttachments = &color_attachment_ref
 	};
 
+	VkSubpassDependency subpass_dependency = {
+		.srcSubpass = VK_SUBPASS_EXTERNAL,
+		.dstSubpass = 0,
+		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+	};
+
 	VkRenderPassCreateInfo render_pass_create_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 		.attachmentCount = 1,
 		.pAttachments = &color_attachment,
 		.subpassCount = 1,
-		.pSubpasses = &subpass
+		.pSubpasses = &subpass,
+		.dependencyCount = 1,
+		.pDependencies = &subpass_dependency
 	};
 
 	VkRenderPass render_pass;
 	if (vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass) != VK_SUCCESS) {
 		printf("Unable to create render pass\n");
-		return;
+		return (VulkanState){};
 	}
 
 	VkGraphicsPipelineCreateInfo pipeline_create_info = {
@@ -534,12 +605,112 @@ void win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width, u32 wi
 	VkPipeline graphics_pipeline;
 	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &graphics_pipeline) != VK_SUCCESS) {
 		printf("Unable to create graphics pipeline\n");
-		return;
+		return (VulkanState){};
 	}
+
+	VkFramebuffer* framebuffers = malloc(swapchain_image_view_count * sizeof(VkFramebuffer));
+	FOR(image_view_index, swapchain_image_view_count) {
+		VkImageView attachments[] = { swapchain_image_views[image_view_index] };
+
+		VkFramebufferCreateInfo framebuffer_create_info = {
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = render_pass,
+			.attachmentCount = 1,
+			.pAttachments = attachments,
+			.width = swap_extent.width,
+			.height = swap_extent.height,
+			.layers = 1
+		};
+
+		if (vkCreateFramebuffer(device, &framebuffer_create_info, NULL, &framebuffers[image_view_index]) != VK_SUCCESS) {
+			printf("Unable to create framebuffer %i\n", image_view_index);
+			return (VulkanState){};
+		}
+	}
+
+	// Create command pool and command buffer
+	VkCommandPoolCreateInfo command_pool_create_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		.queueFamilyIndex = graphics_family
+	};
+
+	VkCommandPool command_pool;
+	if (vkCreateCommandPool(device, &command_pool_create_info, NULL, &command_pool) != VK_SUCCESS) {
+		printf("Unable to create command pool\n");
+		return (VulkanState){};
+	}
+
+	VkCommandBufferAllocateInfo command_buffer_allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = command_pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	};
+
+	VkCommandBuffer command_buffer;
+	if (vkAllocateCommandBuffers(device, &command_buffer_allocate_info, &command_buffer) != VK_SUCCESS) {
+		printf("Unable to allocate command buffer\n");
+		return (VulkanState){};
+	}
+
+	VkCommandBufferBeginInfo command_buffer_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+	};
+
+	// Create sync primitives
+	VkSemaphoreCreateInfo semaphore_create_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+	};
+
+	VkFenceCreateInfo fence_create_info = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+
+	VkSemaphore image_available_semaphore;
+	VkSemaphore render_finished_semaphore;
+	VkFence in_flight_fence;
+	if (vkCreateSemaphore(device, &semaphore_create_info, NULL, &image_available_semaphore) != VK_SUCCESS ||
+		vkCreateSemaphore(device, &semaphore_create_info, NULL, &render_finished_semaphore) != VK_SUCCESS ||
+		vkCreateFence(device, &fence_create_info, NULL, &in_flight_fence) != VK_SUCCESS) {
+		printf("Failed to create sync primitives\n");
+		return (VulkanState){};
+	}
+
+	// Start a render pass
+	VkClearValue clear_color = { 0, 0, 0, 1 };
+
+	VkRenderPassBeginInfo render_pass_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = render_pass,
+		.framebuffer = framebuffers[0],
+		.renderArea.offset = { 0, 0 },
+		.renderArea.extent = swap_extent,
+		.clearValueCount = 1,
+		.pClearValues = &clear_color
+	};
 
 	// Get queues
 	VkQueue present_queue;
 	VkQueue graphics_queue;
 	vkGetDeviceQueue(device, present_family, 0, &present_queue);
 	vkGetDeviceQueue(device, graphics_family, 0, &graphics_queue);
+
+	return (VulkanState){
+		.device = device,
+		.swapchain = swapchain,
+		.framebuffers = framebuffers,
+		.command_buffer = command_buffer,
+		.graphics_pipeline = graphics_pipeline,
+		.graphics_queue = graphics_queue,
+		.present_queue = present_queue,
+		.viewport = viewport,
+		.scissor = scissor,
+		.command_buffer_begin_info = command_buffer_begin_info,
+		.render_pass_begin_info = render_pass_begin_info,
+		.image_available_semaphore = image_available_semaphore,
+		.render_finished_semaphore = render_finished_semaphore,
+		.in_flight_fence = in_flight_fence
+	};
 }

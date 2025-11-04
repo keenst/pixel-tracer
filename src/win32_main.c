@@ -97,7 +97,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 	win32_load_app();
 	FILETIME prev_load_time = win32_get_modified_time("build/pixel_tracer.dll");
 
-	win32_init_vulkan(window, instance, WINDOW_WIDTH, WINDOW_HEIGHT);
+	VulkanState vulkan_state = win32_init_vulkan(window, instance, WINDOW_WIDTH, WINDOW_HEIGHT);
 
 	MSG message;
 	bool running = true;
@@ -123,6 +123,64 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			TranslateMessage(&message);
 			DispatchMessage(&message);
 		}
+
+		vkWaitForFences(vulkan_state.device, 1, &vulkan_state.in_flight_fence, VK_TRUE, UINT64_MAX);
+		vkResetFences(vulkan_state.device, 1, &vulkan_state.in_flight_fence);
+
+		u32 image_index;
+		vkAcquireNextImageKHR(vulkan_state.device, vulkan_state.swapchain, UINT64_MAX, vulkan_state.image_available_semaphore, VK_NULL_HANDLE, &image_index);
+		vulkan_state.render_pass_begin_info.framebuffer = vulkan_state.framebuffers[image_index];
+
+		vkResetCommandBuffer(vulkan_state.command_buffer, 0);
+
+		if (vkBeginCommandBuffer(vulkan_state.command_buffer, &vulkan_state.command_buffer_begin_info) != VK_SUCCESS) {
+			printf("Unable to begin command buffer\n");
+		}
+
+		vkCmdBeginRenderPass(vulkan_state.command_buffer, &vulkan_state.render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdBindPipeline(vulkan_state.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state.graphics_pipeline);
+
+		vkCmdSetViewport(vulkan_state.command_buffer, 0, 1, &vulkan_state.viewport);
+		vkCmdSetScissor(vulkan_state.command_buffer, 0, 1, &vulkan_state.scissor);
+
+		vkCmdDraw(vulkan_state.command_buffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(vulkan_state.command_buffer);
+
+		if (vkEndCommandBuffer(vulkan_state.command_buffer) != VK_SUCCESS) {
+			printf("Unable to end command buffer\n");
+		}
+
+		VkSemaphore wait_semaphores[] = { vulkan_state.image_available_semaphore };
+		VkSemaphore signal_semaphores[] = { vulkan_state.render_finished_semaphore };
+		VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+		VkSubmitInfo submit_info = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = wait_semaphores,
+			.pWaitDstStageMask = wait_stages,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &vulkan_state.command_buffer,
+			.signalSemaphoreCount = 1,
+			.pSignalSemaphores = signal_semaphores
+		};
+
+		if (vkQueueSubmit(vulkan_state.graphics_queue, 1, &submit_info, vulkan_state.in_flight_fence) != VK_SUCCESS) {
+			printf("Failed to submit draw command buffer\n");
+		}
+
+		VkPresentInfoKHR present_info = {
+			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = signal_semaphores,
+			.swapchainCount = 1,
+			.pSwapchains = &vulkan_state.swapchain,
+			.pImageIndices = &image_index
+		};
+
+		vkQueuePresentKHR(vulkan_state.present_queue, &present_info);
 
 		update_and_render();
 	}
