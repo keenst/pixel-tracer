@@ -41,11 +41,13 @@ PFN_vkResetCommandBuffer vkResetCommandBuffer;
 PFN_vkQueueSubmit vkQueueSubmit;
 PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
+enum { MAX_FRAMES_IN_FLIGHT = 2 };
+
 typedef struct {
 	VkDevice device;
 	VkSwapchainKHR swapchain;
 	VkFramebuffer* framebuffers;
-	VkCommandBuffer command_buffer;
+	VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
 	VkPipeline graphics_pipeline;
 	VkQueue graphics_queue;
 	VkQueue present_queue;
@@ -56,9 +58,9 @@ typedef struct {
 	VkCommandBufferBeginInfo command_buffer_begin_info;
 	VkRenderPassBeginInfo render_pass_begin_info;
 
-	VkSemaphore image_available_semaphore;
-	VkSemaphore render_finished_semaphore;
-	VkFence in_flight_fence;
+	VkSemaphore image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
 } VulkanState;
 
 u32 u32_clamp(u32 min, u32 value, u32 max) {
@@ -421,7 +423,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		};
 
 		if (vkCreateImageView(device, &image_view_create_info, NULL, &swapchain_image_views[image_index]) != VK_SUCCESS) {
-			printf("Unable to create image view %i\n", image_index);
+			printf("Failed to create image view %i\n", image_index);
 			return (VulkanState){};
 		}
 	}
@@ -534,7 +536,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 
 	VkPipelineLayout pipeline_layout;
 	if (vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout) != VK_SUCCESS) {
-		printf("Unable to create pipeline layout\n");
+		printf("Failed to create pipeline layout\n");
 		return (VulkanState){};
 	}
 
@@ -579,7 +581,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 
 	VkRenderPass render_pass;
 	if (vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass) != VK_SUCCESS) {
-		printf("Unable to create render pass\n");
+		printf("Failed to create render pass\n");
 		return (VulkanState){};
 	}
 
@@ -604,7 +606,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 
 	VkPipeline graphics_pipeline;
 	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &graphics_pipeline) != VK_SUCCESS) {
-		printf("Unable to create graphics pipeline\n");
+		printf("Failed to create graphics pipeline\n");
 		return (VulkanState){};
 	}
 
@@ -623,7 +625,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		};
 
 		if (vkCreateFramebuffer(device, &framebuffer_create_info, NULL, &framebuffers[image_view_index]) != VK_SUCCESS) {
-			printf("Unable to create framebuffer %i\n", image_view_index);
+			printf("Failed to create framebuffer %i\n", image_view_index);
 			return (VulkanState){};
 		}
 	}
@@ -637,7 +639,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 
 	VkCommandPool command_pool;
 	if (vkCreateCommandPool(device, &command_pool_create_info, NULL, &command_pool) != VK_SUCCESS) {
-		printf("Unable to create command pool\n");
+		printf("Failed to create command pool\n");
 		return (VulkanState){};
 	}
 
@@ -645,12 +647,12 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.commandPool = command_pool,
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1
+		.commandBufferCount = MAX_FRAMES_IN_FLIGHT
 	};
 
-	VkCommandBuffer command_buffer;
-	if (vkAllocateCommandBuffers(device, &command_buffer_allocate_info, &command_buffer) != VK_SUCCESS) {
-		printf("Unable to allocate command buffer\n");
+	VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
+	if (vkAllocateCommandBuffers(device, &command_buffer_allocate_info, command_buffers) != VK_SUCCESS) {
+		printf("Failed to allocate command buffers\n");
 		return (VulkanState){};
 	}
 
@@ -668,14 +670,16 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.flags = VK_FENCE_CREATE_SIGNALED_BIT
 	};
 
-	VkSemaphore image_available_semaphore;
-	VkSemaphore render_finished_semaphore;
-	VkFence in_flight_fence;
-	if (vkCreateSemaphore(device, &semaphore_create_info, NULL, &image_available_semaphore) != VK_SUCCESS ||
-		vkCreateSemaphore(device, &semaphore_create_info, NULL, &render_finished_semaphore) != VK_SUCCESS ||
-		vkCreateFence(device, &fence_create_info, NULL, &in_flight_fence) != VK_SUCCESS) {
-		printf("Failed to create sync primitives\n");
-		return (VulkanState){};
+	VkSemaphore image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
+	FOR(i, MAX_FRAMES_IN_FLIGHT) {
+		if (vkCreateSemaphore(device, &semaphore_create_info, NULL, &image_available_semaphores[i]) != VK_SUCCESS ||
+			vkCreateSemaphore(device, &semaphore_create_info, NULL, &render_finished_semaphores[i]) != VK_SUCCESS ||
+			vkCreateFence(device, &fence_create_info, NULL, &in_flight_fences[i]) != VK_SUCCESS) {
+			printf("Failed to create sync primitives\n");
+			return (VulkanState){};
+		}
 	}
 
 	// Start a render pass
@@ -697,11 +701,10 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	vkGetDeviceQueue(device, present_family, 0, &present_queue);
 	vkGetDeviceQueue(device, graphics_family, 0, &graphics_queue);
 
-	return (VulkanState){
+	VulkanState output = {
 		.device = device,
 		.swapchain = swapchain,
 		.framebuffers = framebuffers,
-		.command_buffer = command_buffer,
 		.graphics_pipeline = graphics_pipeline,
 		.graphics_queue = graphics_queue,
 		.present_queue = present_queue,
@@ -709,8 +712,12 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.scissor = scissor,
 		.command_buffer_begin_info = command_buffer_begin_info,
 		.render_pass_begin_info = render_pass_begin_info,
-		.image_available_semaphore = image_available_semaphore,
-		.render_finished_semaphore = render_finished_semaphore,
-		.in_flight_fence = in_flight_fence
 	};
+
+	memcpy(output.command_buffers, command_buffers, sizeof(command_buffers));
+	memcpy(output.image_available_semaphores, image_available_semaphores, sizeof(image_available_semaphores));
+	memcpy(output.render_finished_semaphores, render_finished_semaphores, sizeof(render_finished_semaphores));
+	memcpy(output.in_flight_fences, in_flight_fences, sizeof(in_flight_fences));
+
+	return output;
 }

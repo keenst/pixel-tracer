@@ -8,6 +8,15 @@ HMODULE APP_DLL;
 typedef void (*UPDATE_AND_RENDER)(void);
 UPDATE_AND_RENDER update_and_render;
 
+f64 win32_get_time_ms() {
+	LARGE_INTEGER counter;
+	QueryPerformanceCounter(&counter);
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+
+	return (counter.QuadPart / (f64)frequency.QuadPart) * 1000;
+}
+
 bool win32_load_app() {
 	FILE* source = CreateFileA("build/pixel_tracer.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (source == INVALID_HANDLE_VALUE) {
@@ -99,9 +108,35 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 
 	VulkanState vulkan_state = win32_init_vulkan(window, instance, WINDOW_WIDTH, WINDOW_HEIGHT);
 
+	f64 last_update_time = win32_get_time_ms();
+	f64 frame_time;
+
+	const f64 perf_update_interval = 1000;
+	f64 perf_update_timer = 0;
+	u64 frame_count = 0;
+
+	u64 current_frame = 0;
+
 	MSG message;
 	bool running = true;
 	while (running) {
+		f64 time_now = win32_get_time_ms();
+		frame_time = time_now - last_update_time;
+		last_update_time = time_now;
+
+		frame_count++;
+		current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+		perf_update_timer += frame_time;
+		if (perf_update_timer >= perf_update_interval) {
+			char title_buffer[128];
+			snprintf(title_buffer, 128, "FPS: %llu (%f ms)", frame_count, frame_time);
+			SetWindowTextA(window, title_buffer);
+
+			perf_update_timer = 0;
+			frame_count = 0;
+		}
+
 		FILETIME load_time = win32_get_modified_time("build/pixel_tracer.dll");
 		if (CompareFileTime(&load_time, &prev_load_time)) {
 			// Check if file is in use by another process
@@ -124,36 +159,36 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			DispatchMessage(&message);
 		}
 
-		vkWaitForFences(vulkan_state.device, 1, &vulkan_state.in_flight_fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(vulkan_state.device, 1, &vulkan_state.in_flight_fence);
+		vkWaitForFences(vulkan_state.device, 1, &vulkan_state.in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+		vkResetFences(vulkan_state.device, 1, &vulkan_state.in_flight_fences[current_frame]);
 
 		u32 image_index;
-		vkAcquireNextImageKHR(vulkan_state.device, vulkan_state.swapchain, UINT64_MAX, vulkan_state.image_available_semaphore, VK_NULL_HANDLE, &image_index);
+		vkAcquireNextImageKHR(vulkan_state.device, vulkan_state.swapchain, UINT64_MAX, vulkan_state.image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
 		vulkan_state.render_pass_begin_info.framebuffer = vulkan_state.framebuffers[image_index];
 
-		vkResetCommandBuffer(vulkan_state.command_buffer, 0);
+		vkResetCommandBuffer(vulkan_state.command_buffers[current_frame], 0);
 
-		if (vkBeginCommandBuffer(vulkan_state.command_buffer, &vulkan_state.command_buffer_begin_info) != VK_SUCCESS) {
-			printf("Unable to begin command buffer\n");
+		if (vkBeginCommandBuffer(vulkan_state.command_buffers[current_frame], &vulkan_state.command_buffer_begin_info) != VK_SUCCESS) {
+			printf("Failed to begin command buffer\n");
 		}
 
-		vkCmdBeginRenderPass(vulkan_state.command_buffer, &vulkan_state.render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(vulkan_state.command_buffers[current_frame], &vulkan_state.render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-		vkCmdBindPipeline(vulkan_state.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state.graphics_pipeline);
+		vkCmdBindPipeline(vulkan_state.command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state.graphics_pipeline);
 
-		vkCmdSetViewport(vulkan_state.command_buffer, 0, 1, &vulkan_state.viewport);
-		vkCmdSetScissor(vulkan_state.command_buffer, 0, 1, &vulkan_state.scissor);
+		vkCmdSetViewport(vulkan_state.command_buffers[current_frame], 0, 1, &vulkan_state.viewport);
+		vkCmdSetScissor(vulkan_state.command_buffers[current_frame], 0, 1, &vulkan_state.scissor);
 
-		vkCmdDraw(vulkan_state.command_buffer, 3, 1, 0, 0);
+		vkCmdDraw(vulkan_state.command_buffers[current_frame], 6, 1, 0, 0);
 
-		vkCmdEndRenderPass(vulkan_state.command_buffer);
+		vkCmdEndRenderPass(vulkan_state.command_buffers[current_frame]);
 
-		if (vkEndCommandBuffer(vulkan_state.command_buffer) != VK_SUCCESS) {
-			printf("Unable to end command buffer\n");
+		if (vkEndCommandBuffer(vulkan_state.command_buffers[current_frame]) != VK_SUCCESS) {
+			printf("Failed to end command buffer\n");
 		}
 
-		VkSemaphore wait_semaphores[] = { vulkan_state.image_available_semaphore };
-		VkSemaphore signal_semaphores[] = { vulkan_state.render_finished_semaphore };
+		VkSemaphore wait_semaphores[] = { vulkan_state.image_available_semaphores[current_frame] };
+		VkSemaphore signal_semaphores[] = { vulkan_state.render_finished_semaphores[current_frame] };
 		VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
 		VkSubmitInfo submit_info = {
@@ -162,12 +197,12 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			.pWaitSemaphores = wait_semaphores,
 			.pWaitDstStageMask = wait_stages,
 			.commandBufferCount = 1,
-			.pCommandBuffers = &vulkan_state.command_buffer,
+			.pCommandBuffers = &vulkan_state.command_buffers[current_frame],
 			.signalSemaphoreCount = 1,
 			.pSignalSemaphores = signal_semaphores
 		};
 
-		if (vkQueueSubmit(vulkan_state.graphics_queue, 1, &submit_info, vulkan_state.in_flight_fence) != VK_SUCCESS) {
+		if (vkQueueSubmit(vulkan_state.graphics_queue, 1, &submit_info, vulkan_state.in_flight_fences[current_frame]) != VK_SUCCESS) {
 			printf("Failed to submit draw command buffer\n");
 		}
 
