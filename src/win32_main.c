@@ -1,9 +1,10 @@
 #include "win32_unity.h"
 
-const int WINDOW_WIDTH = 1600;
-const int WINDOW_HEIGHT = 900;
-
 HMODULE APP_DLL;
+
+u32 WINDOW_WIDTH = 1600;
+u32 WINDOW_HEIGHT = 900;
+bool WINDOW_RESIZED = false;
 
 typedef void (*UPDATE_AND_RENDER)(void);
 UPDATE_AND_RENDER update_and_render;
@@ -25,6 +26,7 @@ bool win32_load_app() {
 	CloseHandle(source);
 
 	FreeLibrary(APP_DLL);
+
 	FILE* destination = CreateFileA("build/pixel_tracer_temp.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (destination == INVALID_HANDLE_VALUE) {
 		return false;
@@ -53,6 +55,19 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 		case WM_DESTROY: {
 			PostQuitMessage(0);
 		} return 0;
+		case WM_SIZE: {
+			RECT client_rect = {
+				.left = 0,
+				.top = 0,
+				.right = LOWORD(l_param),
+				.bottom = HIWORD(l_param)
+			};
+			AdjustWindowRect(&client_rect, WS_OVERLAPPEDWINDOW, 0);
+
+			WINDOW_WIDTH = client_rect.right - client_rect.left;
+			WINDOW_HEIGHT = client_rect.bottom - client_rect.top;
+			WINDOW_RESIZED = true;
+		} break;
 	}
 
 	return DefWindowProc(window, message, w_param, l_param);
@@ -124,7 +139,6 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		frame_time = time_now - last_update_time;
 		last_update_time = time_now;
 
-		frame_count++;
 		current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
 		perf_update_timer += frame_time;
@@ -160,6 +174,16 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		}
 
 		vkWaitForFences(vulkan_state.device, 1, &vulkan_state.in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+
+		if (WINDOW_RESIZED) {
+			win32_create_swapchain(&vulkan_state, WINDOW_WIDTH, WINDOW_HEIGHT);
+			vulkan_state.viewport.width = vulkan_state.swap_extent.width;
+			vulkan_state.viewport.height = vulkan_state.swap_extent.height;
+			vulkan_state.scissor.extent = vulkan_state.swap_extent;
+			vulkan_state.render_pass_begin_info.renderArea.extent = vulkan_state.swap_extent;
+			WINDOW_RESIZED = false;
+		}
+
 		vkResetFences(vulkan_state.device, 1, &vulkan_state.in_flight_fences[current_frame]);
 
 		u32 image_index;
@@ -218,5 +242,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		vkQueuePresentKHR(vulkan_state.present_queue, &present_info);
 
 		update_and_render();
+
+		frame_count++;
 	}
 }
