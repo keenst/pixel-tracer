@@ -49,6 +49,8 @@ PFN_vkDestroyImageView vkDestroyImageView;
 enum { MAX_FRAMES_IN_FLIGHT = 2 };
 
 typedef struct {
+	bool is_initialized;
+
 	VkDevice device;
 	VkPhysicalDevice physical_device;
 
@@ -346,11 +348,6 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	vkEnumerateInstanceLayerProperties(&layer_count, NULL);
 	VkLayerProperties available_layers[layer_count];
 	vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
-
-	printf("Available layers: %i\n", layer_count);
-	for (u32 i = 0; i < layer_count; i++) {
-		printf("%s\n", available_layers[i].layerName);
-	}
 
 	// Look for a suitable physical device
 	u32 physical_device_count;
@@ -764,6 +761,8 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	// Get queues
 	vkGetDeviceQueue(vulkan_state.device, vulkan_state.present_family, 0, &vulkan_state.present_queue);
 	vkGetDeviceQueue(vulkan_state.device, vulkan_state.graphics_family, 0, &vulkan_state.graphics_queue);
+
+	vulkan_state.is_initialized = true;
 
 	return vulkan_state;
 }
