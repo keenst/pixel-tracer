@@ -34,5 +34,6 @@ del app_compile_commands.json
 
 :: shaders
 slangc ..\src\triangle.slang -target spirv -o ..\data\shaders\triangle.spv
+slangc ..\src\compute.slang -target spirv -o ..\data\shaders\compute.spv
 
 cd ..

@@ -4,7 +4,6 @@ HMODULE APP_DLL;
 
 u32 WINDOW_WIDTH = 1600;
 u32 WINDOW_HEIGHT = 900;
-bool WINDOW_RESIZED = false;
 
 VulkanState VULKAN_STATE = {};
 u32 CURRENT_FRAME = 0;
@@ -19,6 +18,11 @@ f64 win32_get_time_ms() {
 	QueryPerformanceFrequency(&frequency);
 
 	return (counter.QuadPart / (f64)frequency.QuadPart) * 1000;
+}
+
+int win32_message_box(char* caption, char* text, u32 type) {
+	HWND window = GetActiveWindow();
+	return MessageBoxA(window, text, caption, type);
 }
 
 bool win32_load_app() {
@@ -54,30 +58,42 @@ bool win32_load_app() {
 }
 
 void win32_draw_frame(VulkanState* vulkan_state, u32 current_frame) {
-	vkWaitForFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+	// Compute
+	VK_ASSERT(vkWaitForFences(vulkan_state->device, 1, &vulkan_state->compute_in_flight_fences[current_frame], VK_TRUE, UINT64_MAX));
+	VK_ASSERT(vkResetFences(vulkan_state->device, 1, &vulkan_state->compute_in_flight_fences[current_frame]));
 
-	if (WINDOW_RESIZED) {
-		/*
-		win32_create_swapchain(vulkan_state, WINDOW_WIDTH, WINDOW_HEIGHT);
-		vulkan_state->viewport.width = vulkan_state->swap_extent.width;
-		vulkan_state->viewport.height = vulkan_state->swap_extent.height;
-		vulkan_state->scissor.extent = vulkan_state->swap_extent;
-		vulkan_state->render_pass_begin_info.renderArea.extent = vulkan_state->swap_extent;
-		WINDOW_RESIZED = false;
-		*/
-	}
+	VK_ASSERT(vkResetCommandBuffer(vulkan_state->compute_command_buffers[current_frame], 0));
+	VK_ASSERT(vkBeginCommandBuffer(vulkan_state->compute_command_buffers[current_frame], &vulkan_state->command_buffer_begin_info));
 
-	vkResetFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame]);
+	vkCmdBindPipeline(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline);
+	vkCmdBindDescriptorSets(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline_layout, 0, 1, &vulkan_state->compute_descriptor_sets[current_frame], 0, NULL);
+	vkCmdDispatch(vulkan_state->compute_command_buffers[current_frame], 64, 1, 1);
+
+	VK_ASSERT(vkEndCommandBuffer(vulkan_state->compute_command_buffers[current_frame]));
+
+	VkSemaphore compute_signal_semaphores[] = { vulkan_state->compute_finished_semaphores[current_frame] };
+	VkSubmitInfo compute_submit_info = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &vulkan_state->compute_command_buffers[current_frame],
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = compute_signal_semaphores
+	};
+
+	transition_image_layout(vulkan_state, vulkan_state->texture_image, vulkan_state->surface_format.format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+
+	VK_ASSERT(vkQueueSubmit(vulkan_state->graphics_queue, 1, &compute_submit_info, vulkan_state->compute_in_flight_fences[current_frame]));
+
+	// Graphics
+	VK_ASSERT(vkWaitForFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX));
+	VK_ASSERT(vkResetFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame]));
 
 	u32 image_index;
 	vkAcquireNextImageKHR(vulkan_state->device, vulkan_state->swapchain, UINT64_MAX, vulkan_state->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
 	vulkan_state->render_pass_begin_info.framebuffer = vulkan_state->framebuffers[image_index];
 
-	vkResetCommandBuffer(vulkan_state->command_buffers[current_frame], 0);
-
-	if (vkBeginCommandBuffer(vulkan_state->command_buffers[current_frame], &vulkan_state->command_buffer_begin_info) != VK_SUCCESS) {
-		printf("Failed to begin command buffer\n");
-	}
+	VK_ASSERT(vkResetCommandBuffer(vulkan_state->command_buffers[current_frame], 0));
+	VK_ASSERT(vkBeginCommandBuffer(vulkan_state->command_buffers[current_frame], &vulkan_state->command_buffer_begin_info));
 
 	vkCmdBeginRenderPass(vulkan_state->command_buffers[current_frame], &vulkan_state->render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -86,21 +102,29 @@ void win32_draw_frame(VulkanState* vulkan_state, u32 current_frame) {
 	vkCmdSetViewport(vulkan_state->command_buffers[current_frame], 0, 1, &vulkan_state->viewport);
 	vkCmdSetScissor(vulkan_state->command_buffers[current_frame], 0, 1, &vulkan_state->scissor);
 
+	vkCmdBindDescriptorSets(vulkan_state->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state->graphics_pipeline_layout, 0, 1, &vulkan_state->descriptor_sets[current_frame], 0, NULL);
+
 	vkCmdDraw(vulkan_state->command_buffers[current_frame], 6, 1, 0, 0);
 
 	vkCmdEndRenderPass(vulkan_state->command_buffers[current_frame]);
 
-	if (vkEndCommandBuffer(vulkan_state->command_buffers[current_frame]) != VK_SUCCESS) {
-		printf("Failed to end command buffer\n");
-	}
+	VK_ASSERT(vkEndCommandBuffer(vulkan_state->command_buffers[current_frame]));
 
-	VkSemaphore wait_semaphores[] = { vulkan_state->image_available_semaphores[current_frame] };
+	Vec3f uniform_color = {
+		.r = 1.0f,
+		.g = 0.0f,
+		.b = 0.0f
+	};
+
+	memcpy(vulkan_state->uniform_buffers_mapped[current_frame], &uniform_color, sizeof(uniform_color));
+
+	VkSemaphore wait_semaphores[] = { vulkan_state->compute_finished_semaphores[current_frame], vulkan_state->image_available_semaphores[current_frame] };
 	VkSemaphore signal_semaphores[] = { vulkan_state->render_finished_semaphores[current_frame] };
-	VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
 	VkSubmitInfo submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 1,
+		.waitSemaphoreCount = 2,
 		.pWaitSemaphores = wait_semaphores,
 		.pWaitDstStageMask = wait_stages,
 		.commandBufferCount = 1,
@@ -109,9 +133,9 @@ void win32_draw_frame(VulkanState* vulkan_state, u32 current_frame) {
 		.pSignalSemaphores = signal_semaphores
 	};
 
-	if (vkQueueSubmit(vulkan_state->graphics_queue, 1, &submit_info, vulkan_state->in_flight_fences[current_frame]) != VK_SUCCESS) {
-		printf("Failed to submit draw command buffer\n");
-	}
+	transition_image_layout(vulkan_state, vulkan_state->texture_image, vulkan_state->surface_format.format, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VK_ASSERT(vkQueueSubmit(vulkan_state->graphics_queue, 1, &submit_info, vulkan_state->in_flight_fences[current_frame]));
 
 	VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -153,8 +177,6 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 			VULKAN_STATE.render_pass_begin_info.renderArea.extent = VULKAN_STATE.swap_extent;
 
 			win32_draw_frame(&VULKAN_STATE, CURRENT_FRAME);
-
-			WINDOW_RESIZED = true;
 		} break;
 	}
 
