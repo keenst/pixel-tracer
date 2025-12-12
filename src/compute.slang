@@ -3,6 +3,6 @@ uniform RWTexture2D<float4> render_texture;
 uniform float3 uniform_color;
 
 [shader("compute")]
-void main() {
-	render_texture[int2(160, 90)] = float4(uniform_color, 1);
+void main(int2 coords : SV_DispatchThreadID) {
+	render_texture[coords.xy] = float4((float)coords.x / 320, 0, (float)coords.y / 180, 1);
 }

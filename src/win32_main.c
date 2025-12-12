@@ -67,7 +67,7 @@ void win32_draw_frame(VulkanState* vulkan_state, u32 current_frame) {
 
 	vkCmdBindPipeline(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline);
 	vkCmdBindDescriptorSets(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline_layout, 0, 1, &vulkan_state->compute_descriptor_sets[current_frame], 0, NULL);
-	vkCmdDispatch(vulkan_state->compute_command_buffers[current_frame], 64, 1, 1);
+	vkCmdDispatch(vulkan_state->compute_command_buffers[current_frame], 320, 180, 1);
 
 	VK_ASSERT(vkEndCommandBuffer(vulkan_state->compute_command_buffers[current_frame]));
 
