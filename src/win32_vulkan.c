@@ -5,6 +5,7 @@ PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties;
 PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
 PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
 PFN_vkGetPhysicalDeviceFeatures vkGetPhysicalDeviceFeatures;
+PFN_vkGetPhysicalDeviceFeatures2 vkGetPhysicalDeviceFeatures2;
 PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties;
 PFN_vkCreateDevice vkCreateDevice;
 PFN_vkGetDeviceQueue vkGetDeviceQueue;
@@ -68,6 +69,7 @@ PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets;
 PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
 PFN_vkCreateComputePipelines vkCreateComputePipelines;
 PFN_vkCmdDispatch vkCmdDispatch;
+PFN_vkCmdClearColorImage vkCmdClearColorImage;
 
 enum { MAX_FRAMES_IN_FLIGHT = 2 };
 
@@ -85,13 +87,13 @@ typedef struct {
 	u32 image_view_count;
 	VkFramebuffer* framebuffers;
 	VkImageView* image_views;
-	VkImage texture_image;
+	VkImage render_texture_image;
 
 	VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
 	VkCommandBuffer compute_command_buffers[MAX_FRAMES_IN_FLIGHT];
-	VkBuffer uniform_buffers[MAX_FRAMES_IN_FLIGHT];
-	VkDeviceMemory uniform_buffers_memory[MAX_FRAMES_IN_FLIGHT];
-	void* uniform_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
+	VkBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
+	VkDeviceMemory renderer_state_buffers_memory[MAX_FRAMES_IN_FLIGHT];
+	void* renderer_state_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
 	VkDescriptorSet descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 	VkDescriptorSet compute_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 	VkCommandPool command_pool;
@@ -416,6 +418,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)GetProcAddress(vulkan_dll, "vkEnumeratePhysicalDevices");
 	vkGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceProperties");
 	vkGetPhysicalDeviceFeatures = (PFN_vkGetPhysicalDeviceFeatures)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceFeatures");
+	vkGetPhysicalDeviceFeatures2 = (PFN_vkGetPhysicalDeviceFeatures2)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceFeatures2");
 	vkGetPhysicalDeviceQueueFamilyProperties = (PFN_vkGetPhysicalDeviceQueueFamilyProperties)GetProcAddress(vulkan_dll, "vkGetPhysicalDeviceQueueFamilyProperties");
 	vkCreateDevice = (PFN_vkCreateDevice)GetProcAddress(vulkan_dll, "vkCreateDevice");
 	vkGetDeviceQueue = (PFN_vkGetDeviceQueue)GetProcAddress(vulkan_dll, "vkGetDeviceQueue");
@@ -478,6 +481,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	vkCmdBindDescriptorSets = (PFN_vkCmdBindDescriptorSets)GetProcAddress(vulkan_dll, "vkCmdBindDescriptorSets");
 	vkCreateComputePipelines = (PFN_vkCreateComputePipelines)GetProcAddress(vulkan_dll, "vkCreateComputePipelines");
 	vkCmdDispatch = (PFN_vkCmdDispatch)GetProcAddress(vulkan_dll, "vkCmdDispatch");
+	vkCmdClearColorImage = (PFN_vkCmdClearColorImage)GetProcAddress(vulkan_dll, "vkCmdClearColorImage");
 
 	/*=========*/
 	/*  Setup  */
@@ -755,11 +759,11 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.samples = VK_SAMPLE_COUNT_1_BIT
 	};
 
-	VK_ASSERT(vkCreateImage(vulkan_state.device, &image_create_info, NULL, &vulkan_state.texture_image));
+	VK_ASSERT(vkCreateImage(vulkan_state.device, &image_create_info, NULL, &vulkan_state.render_texture_image));
 
 	// Allocate image memory
 	VkMemoryRequirements texture_memory_requirements;
-	vkGetImageMemoryRequirements(vulkan_state.device, vulkan_state.texture_image, &texture_memory_requirements);
+	vkGetImageMemoryRequirements(vulkan_state.device, vulkan_state.render_texture_image, &texture_memory_requirements);
 
 	VkMemoryAllocateInfo texture_memory_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -767,17 +771,17 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.memoryTypeIndex = find_vulkan_memory_type(&vulkan_state, texture_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
 	};
 
-	VkDeviceMemory texture_image_memory;
-	VK_ASSERT(vkAllocateMemory(vulkan_state.device, &texture_memory_allocate_info, NULL, &texture_image_memory));
+	VkDeviceMemory render_texture_image_memory;
+	VK_ASSERT(vkAllocateMemory(vulkan_state.device, &texture_memory_allocate_info, NULL, &render_texture_image_memory));
 
-	vkBindImageMemory(vulkan_state.device, vulkan_state.texture_image, texture_image_memory, 0);
+	vkBindImageMemory(vulkan_state.device, vulkan_state.render_texture_image, render_texture_image_memory, 0);
 
-	transition_image_layout(&vulkan_state, vulkan_state.texture_image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(&vulkan_state, vulkan_state.render_texture_image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	// Create image view
-	VkImageViewCreateInfo texture_image_view_create_info = {
+	VkImageViewCreateInfo render_texture_image_view_create_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.image = vulkan_state.texture_image,
+		.image = vulkan_state.render_texture_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
 		.format = VK_FORMAT_R8G8B8A8_UNORM,
 		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -787,8 +791,8 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 		.subresourceRange.layerCount = 1
 	};
 
-	VkImageView texture_image_view;
-	VK_ASSERT(vkCreateImageView(vulkan_state.device, &texture_image_view_create_info, NULL, &texture_image_view));
+	VkImageView render_texture_image_view;
+	VK_ASSERT(vkCreateImageView(vulkan_state.device, &render_texture_image_view_create_info, NULL, &render_texture_image_view));
 
 	// Create texture sampler
 	VkSamplerCreateInfo sampler_info = {
@@ -881,7 +885,7 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
 		VkDescriptorImageInfo image_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, // NOTE: Could be bad? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL is suggested by the tutorial, but I need to write to it as well
-			.imageView = texture_image_view,
+			.imageView = render_texture_image_view,
 			.sampler = texture_sampler
 		};
 
@@ -1163,26 +1167,26 @@ VulkanState win32_init_vulkan(HWND window, HINSTANCE instance, u32 window_width,
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
 		win32_create_buffer(
 				&vulkan_state,
-				3 * sizeof(f32),
+				sizeof(RendererState),
 				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				&vulkan_state.uniform_buffers[i],
-				&vulkan_state.uniform_buffers_memory[i]);
+				&vulkan_state.renderer_state_buffers[i],
+				&vulkan_state.renderer_state_buffers_memory[i]);
 
-		vkMapMemory(vulkan_state.device, vulkan_state.uniform_buffers_memory[i], 0, 3 * sizeof(f32), 0, &vulkan_state.uniform_buffers_mapped[i]);
+		vkMapMemory(vulkan_state.device, vulkan_state.renderer_state_buffers_memory[i], 0, sizeof(RendererState), 0, &vulkan_state.renderer_state_buffers_mapped[i]);
 	}
 
 	// Update descriptor sets
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
 		VkDescriptorBufferInfo uniform_buffer_info = {
-			.buffer = vulkan_state.uniform_buffers[i],
+			.buffer = vulkan_state.renderer_state_buffers[i],
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
 
 		VkDescriptorImageInfo storage_buffer_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.imageView = texture_image_view,
+			.imageView = render_texture_image_view,
 			.sampler = texture_sampler
 		};
 

@@ -15,3 +15,13 @@ typedef union {
 	struct { f32 x, y, z; };
 	struct { f32 r, g, b; };
 } Vec3f;
+
+typedef struct {
+	Vec3f pixel_delta_u;
+	byte pad_0[4];
+	Vec3f pixel_delta_v;
+	byte pad_1[4];
+	Vec3f first_pixel_location;
+	u32 sample_count;
+	f32 time;
+} RendererState;

@@ -148,5 +148,6 @@ char* stringify_vulkan_result(VkResult res) {
 #define VK_CHECK(function) function;
 #endif
 
+#include "math.c"
 #include "win32_io.c"
 #include "win32_vulkan.c"
