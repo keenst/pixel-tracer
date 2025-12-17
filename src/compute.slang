@@ -54,9 +54,9 @@ HitInfo ray_vs_sphere(float3 origin, float3 direction, Sphere sphere) {
 	float sqrtd = sqrt(discriminant);
 	float root = (h - sqrtd) / a;
 
-	if (root < 1e-6f) {
+	if (root < 1e-10f) {
 		root = (h + sqrtd) / a;
-		if (root < 1e-6f) {
+		if (root < 1e-10f) {
 			return {};
 		}
 	}
@@ -91,12 +91,16 @@ HitInfo ray_vs_plane(float3 origin, float3 direction) {
 
 static float random_counter = 0;
 float random() {
-	return fract(sin(random_counter++ + renderer_state.time) * 1e6f);
+	return fract(sin(random_counter++ + renderer_state.time) * 1e5f);
+}
+
+float random(float from, float to) {
+	return from + (to - from) * random();
 }
 
 float3 random_unit_vector() {
 	while (true) {
-		float3 rand = float3(random(), random(), random());
+		float3 rand = float3(random(-1, 1), random(-1, 1), random(-1, 1));
 		float length_squared = dot(rand, rand);
 		if (length_squared > 1e-15 && length_squared <= 1) {
 			return rand / sqrt(length_squared);
@@ -118,7 +122,7 @@ float3 random_on_hemisphere(float3 normal) {
 void main(int3 coords : SV_DispatchThreadID) {
 	RendererState state = renderer_state;
 
-	const int sample_count = 16;
+	const int sample_count = 32;
 
 	float3 color = {};
 	for (int i = 0; i < sample_count; i++) {
@@ -147,7 +151,7 @@ void main(int3 coords : SV_DispatchThreadID) {
 			}
 
 			if (closest_hit.hit) {
-				ray.direction = random_on_hemisphere(closest_hit.normal);
+				ray.direction = closest_hit.normal + random_unit_vector();
 				ray.start = closest_hit.intersect_point;
 				path_colors[depth++] = closest_hit.color;
 				continue;

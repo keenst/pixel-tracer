@@ -270,7 +270,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		perf_update_timer += frame_time;
 		if (perf_update_timer >= perf_update_interval) {
 			char title_buffer[128];
-			snprintf(title_buffer, 128, "FPS: %llu (%f ms)", frame_count, frame_time);
+			snprintf(title_buffer, 128, "FPS: %llu (%.3f ms)", frame_count, perf_update_timer / frame_count);
 			SetWindowTextA(window, title_buffer);
 
 			perf_update_timer = 0;

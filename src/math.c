@@ -17,3 +17,7 @@ Vec3f vec3f_add(Vec3f a, Vec3f b) {
 Vec3f vec3f_sub(Vec3f a, Vec3f b) {
 	return vec3f(a.x - b.x, a.y - b.y, a.z - b.z);
 }
+
+f32 vec3f_dot(Vec3f a, Vec3f b) {
+	return a.x * b.x + a.y * b.y + a.z + b.z;
+}
