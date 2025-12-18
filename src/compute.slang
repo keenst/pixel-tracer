@@ -62,10 +62,15 @@ HitInfo ray_vs_sphere(float3 origin, float3 direction, Sphere sphere) {
 	}
 
 	float3 closest_point = origin + direction * root;
+	float3 normal = (closest_point - sphere.center) / sphere.radius;
+
+	if (dot(normal, direction) > 0) {
+		return {};
+	}
 
 	HitInfo hit_info = {};
 	hit_info.hit = true;
-	hit_info.normal = (closest_point - sphere.center) / sphere.radius;
+	hit_info.normal = normal;
 	hit_info.color = sphere.color;
 	hit_info.intersect_point = closest_point;
 	hit_info.t = root;
@@ -122,7 +127,10 @@ float3 random_on_hemisphere(float3 normal) {
 void main(int3 coords : SV_DispatchThreadID) {
 	RendererState state = renderer_state;
 
-	const int sample_count = 32;
+	random_counter = fract(sin(coords.x * coords.y) * 1e5f);
+
+	const int sample_count = 16;
+	const int max_depth = 4;
 
 	float3 color = {};
 	for (int i = 0; i < sample_count; i++) {
@@ -132,10 +140,10 @@ void main(int3 coords : SV_DispatchThreadID) {
 		ray.direction = normalize(pixel_center);
 		ray.start = float3(0);
 
-		float3[4] path_colors = {};
+		float3[max_depth] path_colors = {};
 		int depth = 0;
 		while (true) {
-			if (depth >= 4) {
+			if (depth >= max_depth) {
 				path_colors[depth] = float3(0);
 				break;
 			}

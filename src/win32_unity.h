@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <math.h>
+#include <float.h>
 
 #define VK_NO_PROTOTYPES
 #define VK_USE_PLATFORM_WIN32_KHR

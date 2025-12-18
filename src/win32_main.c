@@ -263,7 +263,11 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		f64 time_now = win32_get_time_ms();
 		frame_time = time_now - last_update_time;
 		last_update_time = time_now;
+
 		total_time += frame_time;
+		if (total_time >= FLT_MAX) {
+			total_time = frame_time;
+		}
 
 		CURRENT_FRAME = (CURRENT_FRAME + 1) % MAX_FRAMES_IN_FLIGHT;
 
