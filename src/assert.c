@@ -1,24 +1,3 @@
-#pragma once
-
-#include <windows.h>
-#include <fileapi.h>
-#include <assert.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <time.h>
-#include <math.h>
-#include <float.h>
-
-#define VK_NO_PROTOTYPES
-#define VK_USE_PLATFORM_WIN32_KHR
-#include "vulkan/vulkan.h"
-
-#include "types.h"
-
-#define FOR(i, n) for(u32 i = 0; i < n; i++)
-
-int win32_message_box(char* caption, char* text, u32 type);
-
 char* stringify_vulkan_result(VkResult res) {
 	switch (res) {
 		case VK_SUCCESS:
@@ -124,7 +103,9 @@ char* stringify_vulkan_result(VkResult res) {
 	}
 }
 
-// TODO: Macro is not portable
+// TODO: Macro is not portable:
+// `__builtin_debugtrap()` is clang-specific.
+// The IDs for the buttons are windows-specific (create a layer for this, just like with the message box type).
 #ifndef NDEBUG
 #define VK_ASSERT(function) \
 	{ \
@@ -137,10 +118,10 @@ char* stringify_vulkan_result(VkResult res) {
 					"Result: %s\n\n" \
 					#function, \
 					__LINE__, stringify_vulkan_result(res)); \
-			u32 button = win32_message_box("Vulkan Assertion", text, MB_ICONERROR | MB_ABORTRETRYIGNORE); \
-			if (button == IDABORT) { \
-				PostQuitMessage(0); \
-			} else if (button == IDRETRY) { \
+			uint32 button = platform_message_box("Vulkan Assertion", text, MBOX_ASSERTION); \
+			if (button == 3) { /* IDABORT */ \
+				platform_quit(); \
+			} else if (button == 4) /* IDRETRY */ { \
 				__builtin_debugtrap(); \
 			} \
 		} \
@@ -148,7 +129,3 @@ char* stringify_vulkan_result(VkResult res) {
 #else
 #define VK_CHECK(function) function;
 #endif
-
-#include "math.c"
-#include "win32_io.c"
-#include "win32_vulkan.c"

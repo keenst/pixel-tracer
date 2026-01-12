@@ -1,27 +1,19 @@
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
+typedef int16_t int16;
+typedef int32_t int32;
+typedef int64_t int64;
 
 typedef uint8_t byte;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-typedef float f32;
-typedef double f64;
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef uint64_t uint64;
 
 typedef union {
-	f32 array[3];
-	struct { f32 x, y, z; };
-	struct { f32 r, g, b; };
-} Vec3f;
+	float array[3];
+	struct { float x, y, z; };
+	struct { float r, g, b; };
+} Float3;
 
-typedef struct {
-	Vec3f pixel_delta_u;
-	byte pad_0[4];
-	Vec3f pixel_delta_v;
-	byte pad_1[4];
-	Vec3f first_pixel_location;
-	u32 sample_count;
-	f32 time;
-} RendererState;
+typedef union {
+	uint32 array[3];
+	struct { uint32 x, y, z; };
+} Uint3;

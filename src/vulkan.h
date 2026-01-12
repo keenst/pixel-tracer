@@ -1,0 +1,71 @@
+enum { MAX_FRAMES_IN_FLIGHT = 2 };
+enum { MAX_VERTEX_BUFFER_SIZE = 4096 };
+
+typedef struct {
+	bool is_initialized;
+
+	VkDevice device;
+	VkPhysicalDevice physical_device;
+
+	VkSurfaceKHR surface;
+	VkSurfaceFormatKHR surface_format;
+
+	VkSwapchainKHR swapchain;
+
+	uint32 image_view_count;
+	VkFramebuffer* framebuffers;
+	VkImageView* image_views;
+	VkImage render_texture_image;
+
+	VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
+	VkCommandBuffer compute_command_buffers[MAX_FRAMES_IN_FLIGHT];
+
+	VkBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
+	VkDeviceMemory renderer_state_buffers_memory[MAX_FRAMES_IN_FLIGHT];
+	void* renderer_state_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
+	VkBuffer vertex_buffer;
+	VkDeviceMemory vertex_buffer_memory;
+	void* vertex_buffer_mapped;
+
+	VkDescriptorSet descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+	VkDescriptorSet compute_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+	VkCommandPool command_pool;
+	VkPipelineLayout graphics_pipeline_layout;
+	VkPipelineLayout compute_pipeline_layout;
+	VkPipeline graphics_pipeline;
+	VkPipeline compute_pipeline;
+	VkQueue graphics_queue;
+	VkQueue present_queue;
+
+	VkPresentModeKHR present_mode;
+
+	VkExtent2D swap_extent;
+	VkRenderPass render_pass;
+
+	uint32 present_family;
+	uint32 graphics_family;
+
+	VkViewport viewport;
+	VkRect2D scissor;
+
+	VkCommandBufferBeginInfo command_buffer_begin_info;
+	VkCommandBufferBeginInfo compute_command_buffer_begin_info;
+	VkRenderPassBeginInfo render_pass_begin_info;
+
+	VkSemaphore image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
+	VkSemaphore compute_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
+	VkFence compute_in_flight_fences[MAX_FRAMES_IN_FLIGHT];
+} VulkanState;
+
+typedef struct {
+	Float3 pixel_delta_u;
+	byte pad_0[4];
+	Float3 pixel_delta_v;
+	byte pad_1[4];
+	Float3 first_pixel_location;
+	uint32 sample_count;
+	float time;
+	uint32 vertex_count;
+} RendererState;

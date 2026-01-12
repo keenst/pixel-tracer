@@ -1,6 +1,7 @@
 [[vk::binding(0)]]
 uniform RWTexture2D<float4> render_texture;
 uniform RendererState renderer_state;
+uniform StructuredBuffer<float3> vertex_buffer;
 
 struct RendererState {
 	float3 pixel_delta_u;
@@ -8,6 +9,7 @@ struct RendererState {
 	float3 first_pixel_location;
 	uint sample_count;
 	float time;
+	uint vertex_count;
 }
 
 struct Sphere {
@@ -24,8 +26,19 @@ static const Sphere[] spheres = {
 	sphere_b
 };
 
-static const float3 plane_origin = float3(0, -15, 0);
-static const float3 plane_normal = float3(0, 1, 0);
+struct Tri {
+	float3[3] verts;
+};
+
+static const Tri tri = { { float3(-0.5, -0.5, -1), float3(0.5, -0.5, -1), float3(0, 0.5, -1) } };
+static const Tri tri_2 = { { float3(0, 0.5, -1), float3(-0.5, -0.5, -1), float3(-1, 0.5, -3) } };
+static const Tri tri_3 = { { float3(0, 0.5, -1), float3(0.5, -0.5, -1), float3(1, 0.5, -3) } };
+
+static const Tri[] tris = {
+	tri,
+	tri_2,
+	tri_3
+};
 
 struct Ray {
 	float3 start;
@@ -39,6 +52,61 @@ struct HitInfo {
 	float3 normal;
 	float3 color;
 };
+
+HitInfo ray_vs_tri(Ray ray, Tri tri) {
+	const float eps = 1e-10f;
+
+	float3 v0 = tri.verts[0];
+	float3 v1 = tri.verts[1];
+	float3 v2 = tri.verts[2];
+
+	float3 v0v1 = v1 - v0;
+	float3 v0v2 = v2 - v0;
+
+	float3 normal = cross(v0v1, v0v2);
+
+	// Plane intersection
+	float d = dot(v0, normal);
+	float t = (d - dot(ray.start, normal)) / dot(ray.direction, normal);
+
+	if (t < eps) {
+		return {};
+	}
+
+	float3 intersection_point = ray.start + ray.direction * t;
+
+	// In-triangle test
+	float area = length(normal) / 2;
+	float3 C;
+
+	// Calculate u
+	float3 v1p = intersection_point - v1;
+	float3 v1v2 = v2 - v1;
+	C = cross(v1v2, v1p);
+	float u = (length(C) / 2) / area;
+	if (dot(normal, C) < 0) return {};
+
+	// Calculate v
+	float3 v2p = intersection_point - v2;
+	float3 v2v0 = v0 - v2;
+	C = cross(v2v0, v2p);
+	float v = (length(C) / 2) / area;
+	if (dot(normal, C) < 0) return {};
+
+	// Third edge
+	float3 v0p = intersection_point - v0;
+	C = cross(v0v1, v0p);
+	if (dot(normal, C) < 0) return {};
+
+	// Return
+	HitInfo hit_info;
+	hit_info.hit = true;
+	hit_info.normal = normal;
+	hit_info.color = float3(1, 1, 1);
+	hit_info.intersect_point = intersection_point;
+	hit_info.t = t;
+	return hit_info;
+}
 
 HitInfo ray_vs_sphere(float3 origin, float3 direction, Sphere sphere) {
 	float3 oc = sphere.center - origin;
@@ -78,6 +146,7 @@ HitInfo ray_vs_sphere(float3 origin, float3 direction, Sphere sphere) {
 }
 
 HitInfo ray_vs_plane(float3 origin, float3 direction) {
+/*
 	float d = dot(plane_origin, plane_normal);
 	float t = (d - dot(origin, plane_normal)) / dot(direction, plane_normal);
 
@@ -92,6 +161,8 @@ HitInfo ray_vs_plane(float3 origin, float3 direction) {
 	hit_info.intersect_point = origin + direction * t;
 	hit_info.t = t;
 	return hit_info;
+*/
+	return {};
 }
 
 static float random_counter = 0;
@@ -150,8 +221,31 @@ void main(int3 coords : SV_DispatchThreadID) {
 
 			float closest_t = 1e20;
 			HitInfo closest_hit = {};
-			for (int sphere_index = 0; sphere_index < 2; sphere_index++) {
-				HitInfo hit_info = ray_vs_sphere(ray.start, ray.direction, spheres[sphere_index]);
+			/*
+			for (int tri_index = 0; tri_index < 3; tri_index++) {
+				HitInfo hit_info = ray_vs_tri(ray, tris[tri_index]);
+				if (hit_info.hit && hit_info.t < closest_t) {
+					closest_t = hit_info.t;
+					closest_hit = hit_info;
+				}
+			}
+			*/
+
+			const int tri_count = state.vertex_count / 3;
+			for (int tri_index = 0; tri_index < tri_count; tri_index++) {
+				int start = tri_index * 9;
+				Tri tri = {
+				/*
+					float3(vertex_buffer[start], vertex_buffer[start + 1], vertex_buffer[start + 2]),
+					float3(vertex_buffer[start + 3], vertex_buffer[start + 4], vertex_buffer[start + 5]),
+					float3(vertex_buffer[start + 6], vertex_buffer[start + 7], vertex_buffer[start + 8])
+					*/
+					vertex_buffer[tri_index * 3],
+					vertex_buffer[tri_index * 3 + 1],
+					vertex_buffer[tri_index * 3 + 2]
+				};
+
+				HitInfo hit_info = ray_vs_tri(ray, tri);
 				if (hit_info.hit && hit_info.t < closest_t) {
 					closest_t = hit_info.t;
 					closest_hit = hit_info;
