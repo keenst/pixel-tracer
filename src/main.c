@@ -6,7 +6,10 @@ uint32 CURRENT_FRAME = 0;
 RendererState RENDERER_STATE;
 
 void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState renderer_state) {
-	// Compute
+	/*======================================*/
+	/*               COMPUTE 				*/
+	/*======================================*/
+
 	memcpy(vulkan_state->renderer_state_buffers_mapped[current_frame], &RENDERER_STATE, sizeof(RendererState));
 
 	VK_ASSERT(vkWaitForFences(vulkan_state->device, 1, &vulkan_state->compute_in_flight_fences[current_frame], VK_TRUE, UINT64_MAX));
@@ -15,16 +18,39 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	VK_ASSERT(vkResetCommandBuffer(vulkan_state->compute_command_buffers[current_frame], 0));
 	VK_ASSERT(vkBeginCommandBuffer(vulkan_state->compute_command_buffers[current_frame], &vulkan_state->command_buffer_begin_info));
 
-	vkCmdBindPipeline(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline);
-	vkCmdBindDescriptorSets(vulkan_state->compute_command_buffers[current_frame], VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_state->compute_pipeline_layout, 0, 1, &vulkan_state->compute_descriptor_sets[current_frame], 0, NULL);
+	vkCmdBindPipeline(
+			vulkan_state->compute_command_buffers[current_frame],
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			vulkan_state->compute_pipeline);
+
+	vkCmdBindDescriptorSets(
+			vulkan_state->compute_command_buffers[current_frame],
+			VK_PIPELINE_BIND_POINT_COMPUTE,
+			vulkan_state->compute_pipeline_layout,
+			0, 1,
+			&vulkan_state->compute_descriptor_sets[current_frame],
+			0, NULL);
+
 	const uint32 local_size = 8;
-	vkCmdDispatch(vulkan_state->compute_command_buffers[current_frame], 320 / local_size + 320 % local_size, 180 / local_size + 180 % local_size, 1);
+	vkCmdDispatch(
+			vulkan_state->compute_command_buffers[current_frame],
+			320 / local_size + 320 % local_size,
+			180 / local_size + 180 % local_size,
+			1);
 
 	VK_ASSERT(vkEndCommandBuffer(vulkan_state->compute_command_buffers[current_frame]));
 
-	transition_image_layout(vulkan_state, vulkan_state->render_texture_image, vulkan_state->surface_format.format, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	transition_image_layout(
+		vulkan_state,
+		vulkan_state->render_texture_image,
+		vulkan_state->surface_format.format,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_IMAGE_LAYOUT_GENERAL);
 
-	VkSemaphore compute_signal_semaphores[] = { vulkan_state->compute_finished_semaphores[current_frame] };
+	VkSemaphore compute_signal_semaphores[] = {
+		vulkan_state->compute_finished_semaphores[current_frame]
+	};
+
 	VkSubmitInfo compute_submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		.commandBufferCount = 1,
@@ -33,27 +59,52 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 		.pSignalSemaphores = compute_signal_semaphores
 	};
 
-	VK_ASSERT(vkQueueSubmit(vulkan_state->graphics_queue, 1, &compute_submit_info, vulkan_state->compute_in_flight_fences[current_frame]));
+	VK_ASSERT(vkQueueSubmit(
+			vulkan_state->graphics_queue,
+			1, &compute_submit_info,
+			vulkan_state->compute_in_flight_fences[current_frame]));
 
-	// Graphics
+	/*======================================*/
+	/*               GRAPHICS 				*/
+	/*======================================*/
+
 	VK_ASSERT(vkWaitForFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX));
 	VK_ASSERT(vkResetFences(vulkan_state->device, 1, &vulkan_state->in_flight_fences[current_frame]));
 
 	uint32 image_index;
-	vkAcquireNextImageKHR(vulkan_state->device, vulkan_state->swapchain, UINT64_MAX, vulkan_state->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
+	vkAcquireNextImageKHR(
+			vulkan_state->device,
+			vulkan_state->swapchain,
+			UINT64_MAX,
+			vulkan_state->image_available_semaphores[current_frame],
+			VK_NULL_HANDLE,
+			&image_index);
+
 	vulkan_state->render_pass_begin_info.framebuffer = vulkan_state->framebuffers[image_index];
 
 	VK_ASSERT(vkResetCommandBuffer(vulkan_state->command_buffers[current_frame], 0));
 	VK_ASSERT(vkBeginCommandBuffer(vulkan_state->command_buffers[current_frame], &vulkan_state->command_buffer_begin_info));
 
-	vkCmdBeginRenderPass(vulkan_state->command_buffers[current_frame], &vulkan_state->render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(
+			vulkan_state->command_buffers[current_frame],
+			&vulkan_state->render_pass_begin_info,
+			VK_SUBPASS_CONTENTS_INLINE);
 
-	vkCmdBindPipeline(vulkan_state->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state->graphics_pipeline);
+	vkCmdBindPipeline(
+			vulkan_state->command_buffers[current_frame],
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			vulkan_state->graphics_pipeline);
 
 	vkCmdSetViewport(vulkan_state->command_buffers[current_frame], 0, 1, &vulkan_state->viewport);
 	vkCmdSetScissor(vulkan_state->command_buffers[current_frame], 0, 1, &vulkan_state->scissor);
 
-	vkCmdBindDescriptorSets(vulkan_state->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_state->graphics_pipeline_layout, 0, 1, &vulkan_state->descriptor_sets[current_frame], 0, NULL);
+	vkCmdBindDescriptorSets(
+			vulkan_state->command_buffers[current_frame],
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			vulkan_state->graphics_pipeline_layout,
+			0,
+			1, &vulkan_state->descriptor_sets[current_frame],
+			0, NULL);
 
 	vkCmdDraw(vulkan_state->command_buffers[current_frame], 6, 1, 0, 0);
 
@@ -61,9 +112,19 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 	VK_ASSERT(vkEndCommandBuffer(vulkan_state->command_buffers[current_frame]));
 
-	VkSemaphore wait_semaphores[] = { vulkan_state->compute_finished_semaphores[current_frame], vulkan_state->image_available_semaphores[current_frame] };
-	VkSemaphore signal_semaphores[] = { vulkan_state->render_finished_semaphores[current_frame] };
-	VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	VkSemaphore wait_semaphores[] = {
+		vulkan_state->compute_finished_semaphores[current_frame],
+		vulkan_state->image_available_semaphores[current_frame]
+	};
+
+	VkSemaphore signal_semaphores[] = {
+		vulkan_state->render_finished_semaphores[current_frame]
+	};
+
+	VkPipelineStageFlags wait_stages[] = {
+		VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	};
 
 	VkSubmitInfo submit_info = {
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -76,7 +137,12 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 		.pSignalSemaphores = signal_semaphores
 	};
 
-	transition_image_layout(vulkan_state, vulkan_state->render_texture_image, vulkan_state->surface_format.format, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(
+			vulkan_state,
+			vulkan_state->render_texture_image,
+			vulkan_state->surface_format.format,
+			VK_IMAGE_LAYOUT_GENERAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	VK_ASSERT(vkQueueSubmit(vulkan_state->graphics_queue, 1, &submit_info, vulkan_state->in_flight_fences[current_frame]));
 

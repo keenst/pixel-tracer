@@ -110,7 +110,11 @@ void transition_image_layout(VulkanState* vulkan_state, VkImage image, VkFormat 
 	end_temp_command_buffer(vulkan_state, temp_command_buffer);
 }
 
-uint32 find_vulkan_memory_type(VulkanState* vulkan_state, VkMemoryRequirements memory_requirements, VkMemoryPropertyFlags property_flags) {
+uint32 find_vulkan_memory_type(
+		VulkanState* vulkan_state,
+		VkMemoryRequirements memory_requirements,
+		VkMemoryPropertyFlags property_flags)
+{
 	VkPhysicalDeviceMemoryProperties memory_properties;
 	vkGetPhysicalDeviceMemoryProperties(vulkan_state->physical_device, &memory_properties);
 
@@ -127,7 +131,14 @@ uint32 find_vulkan_memory_type(VulkanState* vulkan_state, VkMemoryRequirements m
 	return memory_type;
 }
 
-void create_buffer(VulkanState* vulkan_state, VkDeviceSize size, VkBufferUsageFlags usage_flags, VkMemoryPropertyFlags property_flags, VkBuffer* buffer, VkDeviceMemory* buffer_memory) {
+void create_buffer(
+		VulkanState* vulkan_state,
+		VkDeviceSize size,
+		VkBufferUsageFlags usage_flags,
+		VkMemoryPropertyFlags property_flags,
+		VkBuffer* buffer,
+		VkDeviceMemory* buffer_memory)
+{
 	VkBufferCreateInfo buffer_create_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = size,
@@ -169,7 +180,10 @@ void create_swapchain(VulkanState* vulkan_state, uint32 window_width, uint32 win
 
 	// Create swapchain
 	VkSurfaceCapabilitiesKHR surface_capabilities;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkan_state->physical_device, vulkan_state->surface, &surface_capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+			vulkan_state->physical_device,
+			vulkan_state->surface,
+			&surface_capabilities);
 
 	vulkan_state->swap_extent = surface_capabilities.currentExtent;
 	if (surface_capabilities.currentExtent.width == UINT32_MAX) {
@@ -209,9 +223,18 @@ void create_swapchain(VulkanState* vulkan_state, uint32 window_width, uint32 win
 	VK_ASSERT(vkCreateSwapchainKHR(vulkan_state->device, &swapchain_create_info, NULL, &swapchain));
 	vulkan_state->swapchain = swapchain;
 
-	vkGetSwapchainImagesKHR(vulkan_state->device, vulkan_state->swapchain, &vulkan_state->image_view_count, NULL);
+	vkGetSwapchainImagesKHR(
+			vulkan_state->device,
+			vulkan_state->swapchain,
+			&vulkan_state->image_view_count,
+			NULL);
+
 	VkImage swapchain_images[vulkan_state->image_view_count];
-	vkGetSwapchainImagesKHR(vulkan_state->device, vulkan_state->swapchain, &vulkan_state->image_view_count, swapchain_images);
+	vkGetSwapchainImagesKHR(
+			vulkan_state->device,
+			vulkan_state->swapchain,
+			&vulkan_state->image_view_count,
+			swapchain_images);
 
 	// Create image views
 	if (vulkan_state->image_views) {
@@ -237,7 +260,11 @@ void create_swapchain(VulkanState* vulkan_state, uint32 window_width, uint32 win
 			.subresourceRange.layerCount = 1
 		};
 
-		VK_ASSERT(vkCreateImageView(vulkan_state->device, &image_view_create_info, NULL, &vulkan_state->image_views[image_index]));
+		VK_ASSERT(vkCreateImageView(
+				vulkan_state->device,
+				&image_view_create_info,
+				NULL,
+				&vulkan_state->image_views[image_index]));
 	}
 
 	// Create framebuffers
@@ -259,16 +286,23 @@ void create_swapchain(VulkanState* vulkan_state, uint32 window_width, uint32 win
 			.layers = 1
 		};
 
-		VK_ASSERT(vkCreateFramebuffer(vulkan_state->device, &framebuffer_create_info, NULL, &vulkan_state->framebuffers[image_view_index]));
+		VK_ASSERT(vkCreateFramebuffer(
+				vulkan_state->device,
+				&framebuffer_create_info,
+				NULL,
+				&vulkan_state->framebuffers[image_view_index]));
 	}
 
 	return;
 }
 
-VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 window_width, uint32 window_height) {
+VulkanState setup_renderer(
+		VulkanPlatformData vulkan_platform_data,
+		uint32 window_width,
+		uint32 window_height)
+{
 	PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = vulkan_platform_data.func_vkGetInstanceProcAddr;
 	PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties = vulkan_platform_data.func_vkEnumerateInstanceLayerProperties;
-
 
 	VulkanState vulkan_state = {};
 	vulkan_state.surface = vulkan_platform_data.surface;
@@ -276,8 +310,14 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	// Create debug callback
 	VkDebugUtilsMessengerCreateInfoEXT messenger_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-		.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-		.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.messageSeverity = 
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType =
+				VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
 		.pfnUserCallback = vulkan_debug_callback
 	};
 
@@ -307,7 +347,12 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		const uint32 max_available_extension_count = 512;
 		uint32 available_extension_count = max_available_extension_count;
 		VkExtensionProperties available_extensions[max_available_extension_count];
-		vkEnumerateDeviceExtensionProperties(physical_devices[i], NULL, &available_extension_count, available_extensions);
+		vkEnumerateDeviceExtensionProperties(
+				physical_devices[i],
+				NULL,
+				&available_extension_count,
+				available_extensions);
+
 		assert(available_extension_count <= max_available_extension_count);
 
 		FOR(required_extension_index, vulkan_platform_data.device_extension_count) {
@@ -335,9 +380,17 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 
 		// Check queue families
 		uint32 queue_family_count;
-		vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, NULL);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+				physical_devices[i],
+				&queue_family_count,
+				NULL);
+
 		VkQueueFamilyProperties queue_families[queue_family_count];
-		vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, queue_families);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+				physical_devices[i],
+				&queue_family_count,
+				queue_families);
+
 		for (uint32 j = 0; j < queue_family_count; j++) {
 			if (queue_families[j].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
 				queue_families[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
@@ -346,7 +399,12 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 			}
 
 			VkBool32 supports_surface;
-			vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[i], j, vulkan_platform_data.surface, &supports_surface);
+			vkGetPhysicalDeviceSurfaceSupportKHR(
+					physical_devices[i],
+					j,
+					vulkan_platform_data.surface,
+					&supports_surface);
+
 			if (supports_surface) {
 				found_present_family = true;
 				vulkan_state.present_family = j;
@@ -376,14 +434,32 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 
 	// Query surface capabilities
 	uint32 surface_format_count;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(vulkan_state.physical_device, vulkan_platform_data.surface, &surface_format_count, NULL);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(
+			vulkan_state.physical_device,
+			vulkan_platform_data.surface,
+			&surface_format_count,
+			NULL);
+
 	VkSurfaceFormatKHR surface_formats[surface_format_count];
-	vkGetPhysicalDeviceSurfaceFormatsKHR(vulkan_state.physical_device, vulkan_platform_data.surface, &surface_format_count, surface_formats);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(
+			vulkan_state.physical_device,
+			vulkan_platform_data.surface,
+			&surface_format_count,
+			surface_formats);
 
 	uint32 present_mode_count;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(vulkan_state.physical_device, vulkan_platform_data.surface, &present_mode_count, NULL);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(
+			vulkan_state.physical_device,
+			vulkan_platform_data.surface,
+			&present_mode_count,
+			NULL);
+
 	VkPresentModeKHR present_modes[present_mode_count];
-	vkGetPhysicalDeviceSurfacePresentModesKHR(vulkan_state.physical_device, vulkan_platform_data.surface, &present_mode_count, present_modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(
+			vulkan_state.physical_device,
+			vulkan_platform_data.surface,
+			&present_mode_count,
+			present_modes);
 
 	// Find desired modes and formats
 	bool found_desired_format = false;
@@ -443,7 +519,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.enabledExtensionCount = vulkan_platform_data.device_extension_count
 	};
 
-	VK_ASSERT(vkCreateDevice(vulkan_state.physical_device, &device_create_info, NULL, &vulkan_state.device));
+	VK_ASSERT(vkCreateDevice(
+			vulkan_state.physical_device,
+			&device_create_info,
+			NULL,
+			&vulkan_state.device));
 
 	// Get queues
 	vkGetDeviceQueue(vulkan_state.device, vulkan_state.present_family, 0, &vulkan_state.present_queue);
@@ -459,7 +539,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.queueFamilyIndex = vulkan_state.graphics_family
 	};
 
-	VK_ASSERT(vkCreateCommandPool(vulkan_state.device, &command_pool_create_info, NULL, &vulkan_state.command_pool));
+	VK_ASSERT(vkCreateCommandPool(
+			vulkan_state.device,
+			&command_pool_create_info,
+			NULL,
+			&vulkan_state.command_pool));
 
 	VkCommandBufferAllocateInfo command_buffer_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -468,13 +552,19 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.commandBufferCount = MAX_FRAMES_IN_FLIGHT
 	};
 
-	VK_ASSERT(vkAllocateCommandBuffers(vulkan_state.device, &command_buffer_allocate_info, vulkan_state.command_buffers));
+	VK_ASSERT(vkAllocateCommandBuffers(
+			vulkan_state.device,
+			&command_buffer_allocate_info,
+			vulkan_state.command_buffers));
 
 	vulkan_state.command_buffer_begin_info = (VkCommandBufferBeginInfo){
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
 	};
 
-	VK_ASSERT(vkAllocateCommandBuffers(vulkan_state.device, &command_buffer_allocate_info, vulkan_state.compute_command_buffers));
+	VK_ASSERT(vkAllocateCommandBuffers(
+			vulkan_state.device,
+			&command_buffer_allocate_info,
+			vulkan_state.compute_command_buffers));
 
 	/*=========*/
 	/*  Image  */
@@ -497,11 +587,18 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.samples = VK_SAMPLE_COUNT_1_BIT
 	};
 
-	VK_ASSERT(vkCreateImage(vulkan_state.device, &image_create_info, NULL, &vulkan_state.render_texture_image));
+	VK_ASSERT(vkCreateImage(
+			vulkan_state.device,
+			&image_create_info,
+			NULL,
+			&vulkan_state.render_texture_image));
 
 	// Allocate image memory
 	VkMemoryRequirements texture_memory_requirements;
-	vkGetImageMemoryRequirements(vulkan_state.device, vulkan_state.render_texture_image, &texture_memory_requirements);
+	vkGetImageMemoryRequirements(
+			vulkan_state.device,
+			vulkan_state.render_texture_image,
+			&texture_memory_requirements);
 
 	VkMemoryAllocateInfo texture_memory_allocate_info = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -510,11 +607,24 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkDeviceMemory render_texture_image_memory;
-	VK_ASSERT(vkAllocateMemory(vulkan_state.device, &texture_memory_allocate_info, NULL, &render_texture_image_memory));
+	VK_ASSERT(vkAllocateMemory(
+			vulkan_state.device,
+			&texture_memory_allocate_info,
+			NULL,
+			&render_texture_image_memory));
 
-	vkBindImageMemory(vulkan_state.device, vulkan_state.render_texture_image, render_texture_image_memory, 0);
+	vkBindImageMemory(
+			vulkan_state.device, 
+			vulkan_state.render_texture_image,
+			render_texture_image_memory,
+			0);
 
-	transition_image_layout(&vulkan_state, vulkan_state.render_texture_image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	transition_image_layout(
+			&vulkan_state,
+			vulkan_state.render_texture_image,
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	// Create image view
 	VkImageViewCreateInfo render_texture_image_view_create_info = {
@@ -530,7 +640,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkImageView render_texture_image_view;
-	VK_ASSERT(vkCreateImageView(vulkan_state.device, &render_texture_image_view_create_info, NULL, &render_texture_image_view));
+	VK_ASSERT(vkCreateImageView(
+			vulkan_state.device,
+			&render_texture_image_view_create_info,
+			NULL,
+			&render_texture_image_view));
 
 	// Create texture sampler
 	VkSamplerCreateInfo sampler_info = {
@@ -591,7 +705,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkDescriptorPool descriptor_pool;
-	VK_ASSERT(vkCreateDescriptorPool(vulkan_state.device, &pool_create_info, NULL, &descriptor_pool));
+	VK_ASSERT(vkCreateDescriptorPool(
+			vulkan_state.device,
+			&pool_create_info,
+			NULL,
+			&descriptor_pool));
 
 	// Create descriptor set layouts
 	VkDescriptorSetLayoutBinding sampler_layout_binding = {
@@ -608,7 +726,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkDescriptorSetLayout descriptor_set_layout;
-	VK_ASSERT(vkCreateDescriptorSetLayout(vulkan_state.device, &descriptor_set_layout_create_info, NULL, &descriptor_set_layout));
+	VK_ASSERT(vkCreateDescriptorSetLayout(
+			vulkan_state.device,
+			&descriptor_set_layout_create_info,
+			NULL,
+			&descriptor_set_layout));
 
 	VkDescriptorSetLayout descriptor_set_layouts[MAX_FRAMES_IN_FLIGHT];
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -623,7 +745,10 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.pSetLayouts = descriptor_set_layouts
 	};
 
-	VK_ASSERT(vkAllocateDescriptorSets(vulkan_state.device, &descriptor_set_allocate_info, vulkan_state.descriptor_sets));
+	VK_ASSERT(vkAllocateDescriptorSets(
+			vulkan_state.device,
+			&descriptor_set_allocate_info,
+			vulkan_state.descriptor_sets));
 
 	// Update descriptor sets
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -691,7 +816,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.pSetLayouts = &descriptor_set_layout
 	};
 
-	VK_ASSERT(vkCreatePipelineLayout(vulkan_state.device, &pipeline_layout_create_info, NULL, &vulkan_state.graphics_pipeline_layout));
+	VK_ASSERT(vkCreatePipelineLayout(
+			vulkan_state.device,
+			&pipeline_layout_create_info,
+			NULL,
+			&vulkan_state.graphics_pipeline_layout));
 
 	// Create render pass
 	VkAttachmentDescription color_attachment = {
@@ -756,7 +885,10 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkSurfaceCapabilitiesKHR surface_capabilities;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vulkan_state.physical_device, vulkan_platform_data.surface, &surface_capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+			vulkan_state.physical_device,
+			vulkan_platform_data.surface,
+			&surface_capabilities);
 
 	vulkan_state.swap_extent = surface_capabilities.currentExtent;
 	if (surface_capabilities.currentExtent.width == UINT32_MAX) {
@@ -806,7 +938,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkPipelineColorBlendAttachmentState color_blend_attachment = {
-		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+		.colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT,
 		.blendEnable = VK_FALSE,
 	};
 
@@ -817,7 +953,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.pAttachments = &color_blend_attachment
 	};
 
-	VK_ASSERT(vkCreateRenderPass(vulkan_state.device, &render_pass_create_info, NULL, &vulkan_state.render_pass));
+	VK_ASSERT(vkCreateRenderPass(
+			vulkan_state.device,
+			&render_pass_create_info,
+			NULL,
+			&vulkan_state.render_pass));
 
 	VkGraphicsPipelineCreateInfo pipeline_create_info = {
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -838,7 +978,12 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.basePipelineIndex = -1
 	};
 
-	VK_ASSERT(vkCreateGraphicsPipelines(vulkan_state.device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &vulkan_state.graphics_pipeline));
+	VK_ASSERT(vkCreateGraphicsPipelines(
+			vulkan_state.device,
+			VK_NULL_HANDLE,
+			1, &pipeline_create_info,
+			NULL,
+			&vulkan_state.graphics_pipeline));
 
 	/*====================*/
 	/*  COMPUTE PIPELINE  */
@@ -899,7 +1044,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 	};
 
 	VkDescriptorSetLayout compute_descriptor_set_layout;
-	VK_ASSERT(vkCreateDescriptorSetLayout(vulkan_state.device, &compute_descriptor_set_layout_create_info, NULL, &compute_descriptor_set_layout));
+	VK_ASSERT(vkCreateDescriptorSetLayout(
+			vulkan_state.device,
+			&compute_descriptor_set_layout_create_info,
+			NULL,
+			&compute_descriptor_set_layout));
 
 	VkDescriptorSetLayout compute_descriptor_set_layouts[MAX_FRAMES_IN_FLIGHT];
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -913,7 +1062,10 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.pSetLayouts = compute_descriptor_set_layouts
 	};
 
-	VK_ASSERT(vkAllocateDescriptorSets(vulkan_state.device, &compute_descriptor_set_allocate_info, vulkan_state.compute_descriptor_sets));
+	VK_ASSERT(vkAllocateDescriptorSets(
+			vulkan_state.device,
+			&compute_descriptor_set_allocate_info,
+			vulkan_state.compute_descriptor_sets));
 
 	// Allocate and map uniform buffers
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -925,7 +1077,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 				&vulkan_state.renderer_state_buffers[i],
 				&vulkan_state.renderer_state_buffers_memory[i]);
 
-		vkMapMemory(vulkan_state.device, vulkan_state.renderer_state_buffers_memory[i], 0, sizeof(RendererState), 0, &vulkan_state.renderer_state_buffers_mapped[i]);
+		vkMapMemory(
+				vulkan_state.device,
+				vulkan_state.renderer_state_buffers_memory[i],
+				0, sizeof(RendererState),
+				0, &vulkan_state.renderer_state_buffers_mapped[i]);
 	}
 
 	create_buffer(
@@ -936,7 +1092,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 			&vulkan_state.vertex_buffer,
 			&vulkan_state.vertex_buffer_memory);
 
-	vkMapMemory(vulkan_state.device, vulkan_state.vertex_buffer_memory, 0, sizeof(Float3) * MAX_VERTEX_BUFFER_SIZE, 0, &vulkan_state.vertex_buffer_mapped);
+	vkMapMemory(
+			vulkan_state.device,
+			vulkan_state.vertex_buffer_memory,
+			0, sizeof(Float3) * MAX_VERTEX_BUFFER_SIZE,
+			0, &vulkan_state.vertex_buffer_mapped);
 
 	// Update descriptor sets
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -1000,7 +1160,11 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.pSetLayouts = &compute_descriptor_set_layout
 	};
 
-	VK_ASSERT(vkCreatePipelineLayout(vulkan_state.device, &compute_pipeline_layout_create_info, NULL, &vulkan_state.compute_pipeline_layout));
+	VK_ASSERT(vkCreatePipelineLayout(
+			vulkan_state.device,
+			&compute_pipeline_layout_create_info,
+			NULL,
+			&vulkan_state.compute_pipeline_layout));
 
 	VkComputePipelineCreateInfo compute_pipeline_create_info = {
 		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -1008,7 +1172,12 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 		.stage = compute_shader_stage_create_info
 	};
 
-	VK_ASSERT(vkCreateComputePipelines(vulkan_state.device, VK_NULL_HANDLE, 1, &compute_pipeline_create_info, NULL, &vulkan_state.compute_pipeline));
+	VK_ASSERT(vkCreateComputePipelines(
+			vulkan_state.device,
+			VK_NULL_HANDLE,
+			1, &compute_pipeline_create_info,
+			NULL,
+			&vulkan_state.compute_pipeline));
 
 	/*============*/
 	/*  Finalize  */
@@ -1026,13 +1195,36 @@ VulkanState setup_renderer(VulkanPlatformData vulkan_platform_data, uint32 windo
 
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
 		// Graphics
-		VK_ASSERT(vkCreateSemaphore(vulkan_state.device, &semaphore_create_info, NULL, &vulkan_state.image_available_semaphores[i]));
-		VK_ASSERT(vkCreateSemaphore(vulkan_state.device, &semaphore_create_info, NULL, &vulkan_state.render_finished_semaphores[i]));
-		VK_ASSERT(vkCreateFence(vulkan_state.device, &fence_create_info, NULL, &vulkan_state.in_flight_fences[i]));
+		VK_ASSERT(vkCreateSemaphore(
+				vulkan_state.device,
+				&semaphore_create_info,
+				NULL,
+				&vulkan_state.image_available_semaphores[i]));
+
+		VK_ASSERT(vkCreateSemaphore(
+				vulkan_state.device,
+				&semaphore_create_info,
+				NULL,
+				&vulkan_state.render_finished_semaphores[i]));
+
+		VK_ASSERT(vkCreateFence(
+				vulkan_state.device,
+				&fence_create_info,
+				NULL,
+				&vulkan_state.in_flight_fences[i]));
 
 		// Compute
-		VK_ASSERT(vkCreateSemaphore(vulkan_state.device, &semaphore_create_info, NULL, &vulkan_state.compute_finished_semaphores[i]));
-		VK_ASSERT(vkCreateFence(vulkan_state.device, &fence_create_info, NULL, &vulkan_state.compute_in_flight_fences[i]));
+		VK_ASSERT(vkCreateSemaphore(
+				vulkan_state.device,
+				&semaphore_create_info,
+				NULL,
+				&vulkan_state.compute_finished_semaphores[i]));
+
+		VK_ASSERT(vkCreateFence(
+				vulkan_state.device,
+				&fence_create_info,
+				NULL,
+				&vulkan_state.compute_in_flight_fences[i]));
 	}
 
 	// Start a render pass
