@@ -60,14 +60,6 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 	return DefWindowProc(window, message, w_param, l_param);
 }
 
-FILETIME win32_get_modified_time(char* path) {
-	WIN32_FIND_DATA file_data = {};
-	FILE* file = FindFirstFile(path, &file_data);
-	assert(file);
-	FindClose(file);
-	return file_data.ftLastWriteTime;
-}
-
 int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd_show) {
 	AllocConsole();
 	FILE* fp;
@@ -106,7 +98,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 	ShowWindow(window, cmd_show);
 
 	win32_load_app();
-	FILETIME prev_load_time = win32_get_modified_time("build/pixel_tracer.dll");
+	uint64 prev_load_time = platform_get_file_modified_time("build/pixel_tracer.dll");
 
 	VulkanPlatformData vulkan_platform_data = win32_init_vulkan(window, instance);
 
@@ -115,7 +107,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		.window_height = WINDOW_HEIGHT
 	};
 
-	void* game_memory = calloc(1024 * 1024 * 1024, 1);
+	void* game_memory = VirtualAlloc(NULL, 1024 * 1024 * 1024, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
 	game_init(platform_data, vulkan_platform_data, game_memory);
 
@@ -143,8 +135,8 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			frame_count = 0;
 		}
 
-		FILETIME load_time = win32_get_modified_time("build/pixel_tracer.dll");
-		if (CompareFileTime(&load_time, &prev_load_time)) {
+		uint64 load_time = platform_get_file_modified_time("build/pixel_tracer.dll");
+		if (load_time != prev_load_time) {
 			// Check if file is in use by another process
 			FILE* file = CreateFileA("build/pixel_tracer.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (file) {

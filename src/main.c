@@ -160,6 +160,51 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 __declspec(dllexport)
 void game_update_and_render() {
+	// Check for changes to compute shader
+	uint64 compute_shader_modified_time = platform_get_file_modified_time("data/shaders/compute.spv");
+	if (compute_shader_modified_time > GAME_MEMORY->prev_compute_shader_modified_time) {
+		GAME_MEMORY->prev_compute_shader_modified_time = compute_shader_modified_time;
+
+		VulkanState* vulkan_state = &GAME_MEMORY->vulkan_state;
+
+		// Create shader module
+		uint32 compute_shader_code_size;
+		char* compute_shader_code = platform_read_file("data/shaders/compute.spv", &compute_shader_code_size);
+
+		VkShaderModuleCreateInfo compute_shader_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = compute_shader_code_size,
+			.pCode = (uint32*)compute_shader_code
+		};
+
+		VkShaderModule compute_shader_module;
+		vkCreateShaderModule(vulkan_state->device, &compute_shader_create_info, NULL, &compute_shader_module);
+
+		VkPipelineShaderStageCreateInfo compute_shader_stage_create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+			.module = compute_shader_module,
+			.pName = "main"
+		};
+
+		// Create pipeline
+		VkComputePipelineCreateInfo compute_pipeline_create_info = {
+			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+			.layout = vulkan_state->compute_pipeline_layout,
+			.stage = compute_shader_stage_create_info
+		};
+
+		VK_ASSERT(vkCreateComputePipelines(
+				vulkan_state->device,
+				VK_NULL_HANDLE,
+				1, &compute_pipeline_create_info,
+				NULL,
+				&vulkan_state->compute_pipeline));
+
+		printf("Rebuilt compute pipeline\n");
+	}
+
+	// Draw
 	draw_frame(&GAME_MEMORY->vulkan_state, CURRENT_FRAME, RENDERER_STATE);
 	CURRENT_FRAME = (CURRENT_FRAME + 1) % 2;
 }
@@ -177,6 +222,7 @@ void game_init(
 
 	if (!GAME_MEMORY->vulkan_state.is_initialized) {
 		GAME_MEMORY->vulkan_state = setup_renderer(vulkan_platform_data, platform_data.window_width, platform_data.window_height);
+		GAME_MEMORY->prev_compute_shader_modified_time = platform_get_file_modified_time("data/shaders/compute.spv");
 	}
 
 	float focal_length = 1;

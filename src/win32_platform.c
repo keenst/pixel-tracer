@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <assert.h>
 #include "vulkan/vulkan.h"
 #include "types.h"
 
@@ -42,4 +43,19 @@ int platform_message_box(char* caption, char* text, MessageBoxType type) {
 
 void platform_quit() {
 	PostQuitMessage(0);
+}
+
+uint64 platform_get_file_modified_time(char* path) {
+	WIN32_FIND_DATA file_data = {};
+	FILE* file = FindFirstFile(path, &file_data);
+	assert(file);
+	FindClose(file);
+
+	FILETIME write_time = file_data.ftLastWriteTime;
+	ULARGE_INTEGER integer_time = {
+		.LowPart = write_time.dwLowDateTime,
+		.HighPart = write_time.dwHighDateTime
+	};
+
+	return integer_time.QuadPart;
 }
