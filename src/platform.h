@@ -5,6 +5,8 @@ typedef enum {
 typedef struct {
 	uint32 window_width;
 	uint32 window_height;
+	float delta_time;
+	float total_time;
 } PlatformData;
 
 typedef struct {

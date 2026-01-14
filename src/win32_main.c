@@ -5,7 +5,7 @@ uint32 WINDOW_HEIGHT = 900;
 
 typedef void (*GAME_UPDATE_AND_RENDER)(void);
 GAME_UPDATE_AND_RENDER game_update_and_render;
-typedef void (*GAME_INIT)(PlatformData, VulkanPlatformData, void*);
+typedef void (*GAME_INIT)(PlatformData*, VulkanPlatformData, void*);
 GAME_INIT game_init;
 
 double win32_get_time_ms() {
@@ -104,12 +104,14 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 
 	PlatformData platform_data = {
 		.window_width = WINDOW_WIDTH,
-		.window_height = WINDOW_HEIGHT
+		.window_height = WINDOW_HEIGHT,
+		.delta_time = 0,
+		.total_time = 0
 	};
 
 	void* game_memory = VirtualAlloc(NULL, 1024 * 1024 * 1024, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-	game_init(platform_data, vulkan_platform_data, game_memory);
+	game_init(&platform_data, vulkan_platform_data, game_memory);
 
 	double last_update_time = win32_get_time_ms();
 	double frame_time;
@@ -124,6 +126,9 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		double time_now = win32_get_time_ms();
 		frame_time = time_now - last_update_time;
 		last_update_time = time_now;
+
+		platform_data.delta_time = frame_time / 1000;
+		platform_data.total_time += frame_time / 1000;
 
 		perf_update_timer += frame_time;
 		if (perf_update_timer >= perf_update_interval) {
@@ -145,7 +150,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 					prev_load_time = load_time;
 
 					system("cls");
-					game_init(platform_data, vulkan_platform_data, game_memory);
+					game_init(&platform_data, vulkan_platform_data, game_memory);
 				}
 			}
 		}
