@@ -2,7 +2,6 @@
 
 GameMemory* GAME_MEMORY;
 
-uint32 CURRENT_FRAME = 0;
 RendererState RENDERER_STATE;
 
 void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState renderer_state) {
@@ -205,8 +204,8 @@ void game_update_and_render() {
 	}
 
 	// Draw
-	draw_frame(&GAME_MEMORY->vulkan_state, CURRENT_FRAME, RENDERER_STATE);
-	CURRENT_FRAME = (CURRENT_FRAME + 1) % 2;
+	draw_frame(&GAME_MEMORY->vulkan_state, GAME_MEMORY->current_frame, RENDERER_STATE);
+	GAME_MEMORY->current_frame = (GAME_MEMORY->current_frame + 1) % 2;
 }
 
 __declspec(dllexport)
@@ -223,6 +222,7 @@ void game_init(
 	if (!GAME_MEMORY->vulkan_state.is_initialized) {
 		GAME_MEMORY->vulkan_state = setup_renderer(vulkan_platform_data, platform_data.window_width, platform_data.window_height);
 		GAME_MEMORY->prev_compute_shader_modified_time = platform_get_file_modified_time("data/shaders/compute.spv");
+		GAME_MEMORY->current_frame = 0;
 	}
 
 	float focal_length = 1;
