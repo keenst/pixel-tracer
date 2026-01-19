@@ -16,4 +16,4 @@ typedef union {
 typedef union {
 	uint32 array[3];
 	struct { uint32 x, y, z; };
-} Uint3;
+} UInt3;

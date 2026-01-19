@@ -685,7 +685,7 @@ VulkanState setup_renderer(
 		.descriptorCount = MAX_FRAMES_IN_FLIGHT
 	};
 
-	VkDescriptorPoolSize vertex_buffer_pool_size = {
+	VkDescriptorPoolSize storage_buffer_pool_size = {
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = MAX_FRAMES_IN_FLIGHT
 	};
@@ -694,12 +694,13 @@ VulkanState setup_renderer(
 		uniform_pool_size,
 		sampler_pool_size,
 		compute_pool_size,
-		vertex_buffer_pool_size
+		storage_buffer_pool_size,
+		storage_buffer_pool_size
 	};
 
 	VkDescriptorPoolCreateInfo pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.poolSizeCount = 4,
+		.poolSizeCount = 5,
 		.pPoolSizes = pool_sizes,
 		.maxSets = MAX_FRAMES_IN_FLIGHT * 2
 	};
@@ -1024,8 +1025,15 @@ VulkanState setup_renderer(
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
-	VkDescriptorSetLayoutBinding vertex_buffer_layout_binding = {
+	VkDescriptorSetLayoutBinding triangle_buffer_layout_binding = {
 		.binding = 2,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding bvh_buffer_layout_binding = {
+		.binding = 3,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
@@ -1034,12 +1042,13 @@ VulkanState setup_renderer(
 	VkDescriptorSetLayoutBinding compute_descriptor_set_layout_bindings[] = {
 		rw_texture_layout_binding,
 		uniform_buffer_layout_binding,
-		vertex_buffer_layout_binding
+		triangle_buffer_layout_binding,
+		bvh_buffer_layout_binding
 	};
 
 	VkDescriptorSetLayoutCreateInfo compute_descriptor_set_layout_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 3,
+		.bindingCount = 4,
 		.pBindings = compute_descriptor_set_layout_bindings
 	};
 
@@ -1086,17 +1095,31 @@ VulkanState setup_renderer(
 
 	create_buffer(
 			&vulkan_state,
-			sizeof(Float3) * MAX_VERTEX_BUFFER_SIZE,
+			sizeof(Triangle) * MAX_TRIANGLE_BUFFER_COUNT,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&vulkan_state.vertex_buffer,
-			&vulkan_state.vertex_buffer_memory);
+			&vulkan_state.triangle_buffer,
+			&vulkan_state.triangle_buffer_memory);
 
 	vkMapMemory(
 			vulkan_state.device,
-			vulkan_state.vertex_buffer_memory,
-			0, sizeof(Float3) * MAX_VERTEX_BUFFER_SIZE,
-			0, &vulkan_state.vertex_buffer_mapped);
+			vulkan_state.triangle_buffer_memory,
+			0, sizeof(Triangle) * MAX_TRIANGLE_BUFFER_COUNT,
+			0, &vulkan_state.triangle_buffer_mapped);
+
+	create_buffer(
+			&vulkan_state,
+			sizeof(BVHNodeFlat) * MAX_BVH_BUFFER_COUNT,
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&vulkan_state.bvh_buffer,
+			&vulkan_state.bvh_buffer_memory);
+
+	vkMapMemory(
+			vulkan_state.device,
+			vulkan_state.bvh_buffer_memory,
+			0, sizeof(BVHNodeFlat) * MAX_BVH_BUFFER_COUNT,
+			0, &vulkan_state.bvh_buffer_mapped);
 
 	// Update descriptor sets
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
@@ -1112,13 +1135,19 @@ VulkanState setup_renderer(
 			.sampler = texture_sampler
 		};
 
-		VkDescriptorBufferInfo vertex_buffer_info = {
-			.buffer = vulkan_state.vertex_buffer,
+		VkDescriptorBufferInfo triangle_buffer_info = {
+			.buffer = vulkan_state.triangle_buffer,
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
 
-		VkWriteDescriptorSet write_descriptors[3];
+		VkDescriptorBufferInfo bvh_buffer_info = {
+			.buffer = vulkan_state.bvh_buffer,
+			.offset = 0,
+			.range = VK_WHOLE_SIZE
+		};
+
+		VkWriteDescriptorSet write_descriptors[4];
 
 		write_descriptors[0] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1147,10 +1176,20 @@ VulkanState setup_renderer(
 			.dstArrayElement = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
-			.pBufferInfo = &vertex_buffer_info
+			.pBufferInfo = &triangle_buffer_info
 		};
 
-		vkUpdateDescriptorSets(vulkan_state.device, 3, write_descriptors, 0, NULL);
+		write_descriptors[3] = (VkWriteDescriptorSet){
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vulkan_state.compute_descriptor_sets[i],
+			.dstBinding = 3,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo = &bvh_buffer_info
+		};
+
+		vkUpdateDescriptorSets(vulkan_state.device, 4, write_descriptors, 0, NULL);
 	}
 
 	// Pipeline

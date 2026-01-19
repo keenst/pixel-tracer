@@ -1,5 +1,6 @@
 enum { MAX_FRAMES_IN_FLIGHT = 2 };
-enum { MAX_VERTEX_BUFFER_SIZE = 4096 };
+enum { MAX_TRIANGLE_BUFFER_COUNT = 256 };
+enum { MAX_BVH_BUFFER_COUNT = 4096 };
 
 typedef struct {
 	bool is_initialized;
@@ -23,9 +24,12 @@ typedef struct {
 	VkBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
 	VkDeviceMemory renderer_state_buffers_memory[MAX_FRAMES_IN_FLIGHT];
 	void* renderer_state_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
-	VkBuffer vertex_buffer;
-	VkDeviceMemory vertex_buffer_memory;
-	void* vertex_buffer_mapped;
+	VkBuffer triangle_buffer;
+	VkDeviceMemory triangle_buffer_memory;
+	void* triangle_buffer_mapped;
+	VkBuffer bvh_buffer;
+	VkDeviceMemory bvh_buffer_memory;
+	void* bvh_buffer_mapped;
 
 	VkDescriptorSet descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 	VkDescriptorSet compute_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
@@ -67,5 +71,6 @@ typedef struct {
 	Float3 first_pixel_location;
 	uint32 sample_count;
 	float time;
-	uint32 vertex_count;
+	uint32 num_triangles;
+	uint32 num_bvh_nodes;
 } RendererState;

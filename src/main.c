@@ -247,10 +247,28 @@ void game_init(
 	};
 
 	// Load assets
-	float* vertices;
-	uint32 vertex_count = parse_obj(platform_read_file("data/assets/suzanne.obj", NULL), &vertices);
-	printf("Vertex count: %i\n", vertex_count);
-	memcpy(GAME_MEMORY->vulkan_state.vertex_buffer_mapped, vertices, sizeof(float) * 4 * vertex_count);
+	Triangle* triangles;
+	uint32 num_triangles = parse_obj(platform_read_file("data/assets/suzanne.obj", NULL), &triangles);
+	printf("Triangle count: %i\n", num_triangles);
 
-	RENDERER_STATE.vertex_count = vertex_count;
+	// Pack and send triangles to GPU
+	FOR(i, num_triangles) {
+		GPUTriangle gpu_triangle;
+		FOR(j, 3) {
+			memcpy(gpu_triangle.vertices[j].array, triangles[i].vertices[j].array, 3 * sizeof(float));
+		}
+
+		memcpy(
+				(GPUTriangle*)GAME_MEMORY->vulkan_state.triangle_buffer_mapped + i,
+				&gpu_triangle,
+				sizeof(GPUTriangle));
+	}
+	RENDERER_STATE.num_triangles = num_triangles;
+
+	BVHNodeFlat* bvh_nodes;
+	uint32 num_bvh_nodes = build_bvh(triangles, num_triangles, &bvh_nodes);
+	memcpy(GAME_MEMORY->vulkan_state.bvh_buffer_mapped, bvh_nodes, num_bvh_nodes * sizeof(BVHNodeFlat));
+	RENDERER_STATE.num_bvh_nodes = num_bvh_nodes;
+
+	printf("BVH size: %i nodes\n", num_bvh_nodes);
 }

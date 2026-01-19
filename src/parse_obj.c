@@ -1,3 +1,5 @@
+#include "parse_obj.h"
+
 float parse_float(char* string, char** end) {
 	float parsed_value = 0;
 
@@ -39,7 +41,7 @@ float parse_float(char* string, char** end) {
 	return parsed_value / powf(10, decimals);
 }
 
-uint32 parse_obj(char* file_contents, float** out_vertices) {
+uint32 parse_obj(char* file_contents, Triangle** out_triangles) {
 	// Count vertices
 	uint32 face_count = 0;
 	uint32 indexed_vertex_count = 0;
@@ -52,7 +54,7 @@ uint32 parse_obj(char* file_contents, float** out_vertices) {
 
 	// Parse vertices
 	Float3* indexed_vertices = malloc(indexed_vertex_count * sizeof(Float3));
-	Uint3* faces = malloc(face_count * sizeof(Uint3));
+	UInt3* faces = malloc(face_count * sizeof(UInt3));
 
 	char* c = file_contents;
 	uint32 indexed_vertex_index = 0;
@@ -72,7 +74,7 @@ uint32 parse_obj(char* file_contents, float** out_vertices) {
 				indexed_vertices[indexed_vertex_index++] = vertex;
 			} break;
 			case 'f': {
-				Uint3 face;
+				UInt3 face;
 				char* next_char;
 
 				c += 2; // Skip f and first space
@@ -99,17 +101,13 @@ uint32 parse_obj(char* file_contents, float** out_vertices) {
 
 	done_parsing:;
 
-	uint32 vertex_count = face_count * 3;
-	float* vertices = malloc(vertex_count * 4 * sizeof(float));
-
-	uint32 vertex_index = 0;
-	FOR(face_index, face_count) {
-		FOR(i, 3) {
-			memcpy(&vertices[vertex_index++ * 4], &indexed_vertices[faces[face_index].array[i]], 3 * sizeof(float));
-			//vertices[vertex_index++] = indexed_vertices[faces[face_index].array[i]];
+	Triangle* triangles = malloc(face_count * sizeof(Triangle));
+	FOR(tri_index, face_count) {
+		FOR(vert_index, 3) {
+			triangles[tri_index].vertices[vert_index] = indexed_vertices[faces[tri_index].array[vert_index]];
 		}
 	}
 
-	*out_vertices = vertices;
-	return vertex_count;
+	*out_triangles = triangles;
+	return face_count;
 }

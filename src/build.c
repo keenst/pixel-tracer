@@ -4,8 +4,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
+#include <float.h>
 
 #define FOR(i, n) for(uint32 i = 0; i < n; i++)
+#define FOR_RANGE(i, start, end) for(uint32 i = start; i <= end; i++)
 
 #include <stdio.h>
 
@@ -19,5 +21,6 @@
 
 #include "math.c"
 #include "parse_obj.c"
+#include "bvh.c"
 #include "vulkan.c"
 #include "main.c"
