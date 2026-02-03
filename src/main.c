@@ -3,6 +3,12 @@
 GameMemory* GAME_MEMORY;
 PlatformData* PLATFORM_DATA;
 RendererState RENDERER_STATE;
+Inputs PREV_INPUTS = {};
+
+char* SHADER_PATHS[RENDER_COUNT] = {
+	[RENDER_NORMAL] = "shaders/trace.spv",
+	[RENDER_DEBUG] = "shaders/trace_debug.spv"
+};
 
 void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState renderer_state) {
 	/*======================================*/
@@ -157,56 +163,77 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	vkQueuePresentKHR(vulkan_state->present_queue, &present_info);
 }
 
+void load_trace_shader(char* path) {
+	VulkanState* vulkan_state = &GAME_MEMORY->vulkan_state;
+
+	// Create shader module
+	uint32 compute_shader_code_size;
+	char* compute_shader_code = platform_read_file(path, &compute_shader_code_size);
+
+	VkShaderModuleCreateInfo compute_shader_create_info = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = compute_shader_code_size,
+		.pCode = (uint32*)compute_shader_code
+	};
+
+	VkShaderModule compute_shader_module;
+	vkCreateShaderModule(vulkan_state->device, &compute_shader_create_info, NULL, &compute_shader_module);
+
+	VkPipelineShaderStageCreateInfo compute_shader_stage_create_info = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+		.module = compute_shader_module,
+		.pName = "main"
+	};
+
+	// Create pipeline
+	VkComputePipelineCreateInfo compute_pipeline_create_info = {
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.layout = vulkan_state->compute_pipeline_layout,
+		.stage = compute_shader_stage_create_info
+	};
+
+	VK_ASSERT(vkCreateComputePipelines(
+			vulkan_state->device,
+			VK_NULL_HANDLE,
+			1, &compute_pipeline_create_info,
+			NULL,
+			&vulkan_state->compute_pipeline));
+
+	printf("Rebuilt compute pipeline\n");
+}
+
 __declspec(dllexport)
-void game_update_and_render() {
+void game_update_and_render(Inputs inputs) {
 	// Check for changes to compute shader
-	uint64 compute_shader_modified_time = platform_get_file_modified_time("data/shaders/compute.spv");
+	char* shader_path = SHADER_PATHS[GAME_MEMORY->current_render_mode];
+	uint64 compute_shader_modified_time = platform_get_file_modified_time(shader_path);
 	if (compute_shader_modified_time > GAME_MEMORY->prev_compute_shader_modified_time) {
 		GAME_MEMORY->prev_compute_shader_modified_time = compute_shader_modified_time;
+		load_trace_shader(shader_path);
+	}
 
-		VulkanState* vulkan_state = &GAME_MEMORY->vulkan_state;
+	// Input
+	if (inputs.f1 && !PREV_INPUTS.f1) {
+		if (GAME_MEMORY->current_render_mode != RENDER_NORMAL) {
+			GAME_MEMORY->current_render_mode = RENDER_NORMAL;
+			load_trace_shader(SHADER_PATHS[GAME_MEMORY->current_render_mode]);
+		}
+	}
 
-		// Create shader module
-		uint32 compute_shader_code_size;
-		char* compute_shader_code = platform_read_file("data/shaders/compute.spv", &compute_shader_code_size);
-
-		VkShaderModuleCreateInfo compute_shader_create_info = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = compute_shader_code_size,
-			.pCode = (uint32*)compute_shader_code
-		};
-
-		VkShaderModule compute_shader_module;
-		vkCreateShaderModule(vulkan_state->device, &compute_shader_create_info, NULL, &compute_shader_module);
-
-		VkPipelineShaderStageCreateInfo compute_shader_stage_create_info = {
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-			.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-			.module = compute_shader_module,
-			.pName = "main"
-		};
-
-		// Create pipeline
-		VkComputePipelineCreateInfo compute_pipeline_create_info = {
-			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-			.layout = vulkan_state->compute_pipeline_layout,
-			.stage = compute_shader_stage_create_info
-		};
-
-		VK_ASSERT(vkCreateComputePipelines(
-				vulkan_state->device,
-				VK_NULL_HANDLE,
-				1, &compute_pipeline_create_info,
-				NULL,
-				&vulkan_state->compute_pipeline));
-
-		printf("Rebuilt compute pipeline\n");
+	if (inputs.f2 && !PREV_INPUTS.f2) {
+		if (GAME_MEMORY->current_render_mode != RENDER_DEBUG) {
+			GAME_MEMORY->current_render_mode = RENDER_DEBUG;
+			load_trace_shader(SHADER_PATHS[GAME_MEMORY->current_render_mode]);
+		}
 	}
 
 	// Draw
 	RENDERER_STATE.time = PLATFORM_DATA->total_time;
 	draw_frame(&GAME_MEMORY->vulkan_state, GAME_MEMORY->current_frame, RENDERER_STATE);
 	GAME_MEMORY->current_frame = (GAME_MEMORY->current_frame + 1) % 2;
+
+	PREV_INPUTS = inputs;
 }
 
 __declspec(dllexport)
@@ -224,8 +251,9 @@ void game_init(
 
 	if (!GAME_MEMORY->vulkan_state.is_initialized) {
 		GAME_MEMORY->vulkan_state = setup_renderer(vulkan_platform_data, platform_data->window_width, platform_data->window_height);
-		GAME_MEMORY->prev_compute_shader_modified_time = platform_get_file_modified_time("data/shaders/compute.spv");
+		GAME_MEMORY->prev_compute_shader_modified_time = platform_get_file_modified_time("shaders/trace.spv");
 		GAME_MEMORY->current_frame = 0;
+		GAME_MEMORY->current_render_mode = RENDER_NORMAL;
 	}
 
 	float focal_length = 1;
@@ -248,8 +276,21 @@ void game_init(
 
 	// Load assets
 	Triangle* triangles;
-	uint32 num_triangles = parse_obj(platform_read_file("data/assets/suzanne.obj", NULL), &triangles);
+	uint32 num_triangles = parse_obj(platform_read_file("assets/suzanne.obj", NULL), &triangles);
 	printf("Triangle count: %i\n", num_triangles);
+
+	// Build BVH
+	BVHNodeFlat* bvh_nodes;
+	uint32 num_bvh_nodes = build_bvh(triangles, num_triangles, &bvh_nodes);
+	memcpy(GAME_MEMORY->vulkan_state.bvh_buffer_mapped, bvh_nodes, num_bvh_nodes * sizeof(BVHNodeFlat));
+	RENDERER_STATE.num_bvh_nodes = num_bvh_nodes;
+
+	uint32 count = 0;
+	FOR(i, num_bvh_nodes) {
+		count += bvh_nodes[i].num_triangles;
+	}
+
+	printf("BVH size: %i nodes, %i triangles\n", num_bvh_nodes, count);
 
 	// Pack and send triangles to GPU
 	FOR(i, num_triangles) {
@@ -264,11 +305,4 @@ void game_init(
 				sizeof(GPUTriangle));
 	}
 	RENDERER_STATE.num_triangles = num_triangles;
-
-	BVHNodeFlat* bvh_nodes;
-	uint32 num_bvh_nodes = build_bvh(triangles, num_triangles, &bvh_nodes);
-	memcpy(GAME_MEMORY->vulkan_state.bvh_buffer_mapped, bvh_nodes, num_bvh_nodes * sizeof(BVHNodeFlat));
-	RENDERER_STATE.num_bvh_nodes = num_bvh_nodes;
-
-	printf("BVH size: %i nodes\n", num_bvh_nodes);
 }

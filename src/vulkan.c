@@ -780,7 +780,7 @@ VulkanState setup_renderer(
 
 	// Create shader module
 	uint32 shader_code_size;
-	char* shader_code = platform_read_file("data/shaders/triangle.spv", &shader_code_size);
+	char* shader_code = platform_read_file("shaders/triangle.spv", &shader_code_size);
 
 	VkShaderModuleCreateInfo shader_create_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -992,7 +992,7 @@ VulkanState setup_renderer(
 
 	// Shader
 	uint32 compute_shader_code_size;
-	char* compute_shader_code = platform_read_file("data/shaders/compute.spv", &compute_shader_code_size);
+	char* compute_shader_code = platform_read_file("shaders/trace.spv", &compute_shader_code_size);
 
 	VkShaderModuleCreateInfo compute_shader_create_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,

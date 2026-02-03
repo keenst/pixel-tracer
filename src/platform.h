@@ -22,6 +22,11 @@ typedef struct {
 	uint32 device_extension_count;
 } VulkanPlatformData;
 
+typedef struct {
+	bool f1, f2, f3, f4, f5, f6,
+		 f7, f8, f9, f10, f11, f12;
+} Inputs;
+
 char* platform_read_file(char* path, uint32* out_size);
 int platform_message_box(char* caption, char* text, MessageBoxType type);
 void platform_quit();

@@ -1,12 +1,12 @@
 #include "bvh.h"
 
-void swap_triangles(BVHTriangle* triangles, uint32 a, uint32 b) {
-	BVHTriangle a_temp = triangles[a];
+void swap_triangles(Triangle* triangles, uint32 a, uint32 b) {
+	Triangle a_temp = triangles[a];
 	triangles[a] = triangles[b];
 	triangles[b] = a_temp;
 }
 
-void update_bvh_bounds(BVHTriangle* triangles, BVHNode* node) {
+void update_bvh_bounds(Triangle* triangles, BVHNode* node) {
 	float min_x = FLT_MAX;
 	float min_y = FLT_MAX;
 	float min_z = FLT_MAX;
@@ -30,7 +30,7 @@ void update_bvh_bounds(BVHTriangle* triangles, BVHNode* node) {
 	node->max_bounds = float3(max_x, max_y, max_z);
 }
 
-void subdivide_bvh(BVHTriangle* triangles, BVHNode* node, uint32* num_nodes) {
+void subdivide_bvh(Triangle* triangles, BVHNode* node, uint32* num_nodes) {
 	// Find longest axis
 	Float3 extent = float3_sub(node->max_bounds, node->min_bounds);
 
@@ -63,6 +63,7 @@ void subdivide_bvh(BVHTriangle* triangles, BVHNode* node, uint32* num_nodes) {
 	// Create child nodes for each half
 	uint32 num_left = i - node->first_tri;
 	if (num_left == 0 || num_left == node->num_triangles) {
+		node->is_leaf = true;
 		return;
 	}
 
@@ -116,11 +117,10 @@ uint32 flatten_bvh(BVHNode* node, BVHNodeFlat* flat_nodes, uint32* offset) {
 	return my_offset;
 }
 
-uint32 build_bvh(Triangle* mesh_triangles, uint32 num_triangles, BVHNodeFlat** out_bvh_nodes) {
-	// Convert mesh triangles to bvh triangles
-	BVHTriangle* triangles = malloc(num_triangles * sizeof(BVHTriangle));
+// NOTE(leo): Reorders the supplied triangles.
+uint32 build_bvh(Triangle* triangles, uint32 num_triangles, BVHNodeFlat** out_bvh_nodes) {
+	// Compute centroids
 	FOR(i, num_triangles) {
-		memcpy(triangles[i].vertices, mesh_triangles[i].vertices, 3 * sizeof(Float3));
 		Float3 centroid = {};
 		centroid = float3_add(triangles[i].vertices[0], float3_add(triangles[i].vertices[1], triangles[i].vertices[2]));
 		centroid = float3_scale(centroid, 1.0f / 3);

@@ -27,6 +27,7 @@ IF EXIST *.lib (del *.lib)
 
 :: shaders
 slangc ..\src\triangle.slang -g -target spirv -o ..\data\shaders\triangle.spv
-slangc ..\src\compute.slang -g -target spirv -o ..\data\shaders\compute.spv
+slangc ..\src\trace.slang -g -target spirv -o ..\data\shaders\trace.spv
+slangc ..\src\trace_debug.slang -g -target spirv -o ..\data\shaders\trace_debug.spv
 
 popd

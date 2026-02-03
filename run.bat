@@ -1,3 +1,5 @@
 @echo off
 
-start build\win32_pixel_tracer
+pushd data
+start ..\build\win32_pixel_tracer
+popd

@@ -1,8 +1,3 @@
-typedef struct {
-	Float3 vertices[3];
-	Float3 centroid;
-} BVHTriangle;
-
 typedef struct BVHNode_ {
 	struct BVHNode_* left;
 	struct BVHNode_* right;

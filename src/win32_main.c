@@ -3,10 +3,15 @@ HMODULE GAME_DLL;
 uint32 WINDOW_WIDTH = 1600;
 uint32 WINDOW_HEIGHT = 900;
 
-typedef void (*GAME_UPDATE_AND_RENDER)(void);
+typedef void (*GAME_UPDATE_AND_RENDER)(Inputs inputs);
 GAME_UPDATE_AND_RENDER game_update_and_render;
 typedef void (*GAME_INIT)(PlatformData*, VulkanPlatformData, void*);
 GAME_INIT game_init;
+
+char* GAME_PATH = "../build/pixel_tracer.dll";
+char* TEMP_GAME_PATH = "../build/pixel_tracer_temp.dll";
+
+Inputs INPUTS = {};
 
 double win32_get_time_ms() {
 	LARGE_INTEGER counter;
@@ -18,7 +23,7 @@ double win32_get_time_ms() {
 }
 
 bool win32_load_app() {
-	FILE* source = CreateFileA("build/pixel_tracer.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	FILE* source = CreateFileA(GAME_PATH, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (source == INVALID_HANDLE_VALUE) {
 		return false;
 	}
@@ -26,18 +31,18 @@ bool win32_load_app() {
 
 	FreeLibrary(GAME_DLL);
 
-	FILE* destination = CreateFileA("build/pixel_tracer_temp.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	FILE* destination = CreateFileA(TEMP_GAME_PATH, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (destination == INVALID_HANDLE_VALUE) {
 		return false;
 	}
 	CloseHandle(destination);
 
-	if (!CopyFile("build/pixel_tracer.dll", "build/pixel_tracer_temp.dll", false)) {
+	if (!CopyFile(GAME_PATH, TEMP_GAME_PATH, false)) {
 		printf("Failed to copy app DLL");
 		return false;
 	}
 
-	GAME_DLL = LoadLibraryA("build/pixel_tracer_temp.dll");
+	GAME_DLL = LoadLibraryA(TEMP_GAME_PATH);
 
 	if (GAME_DLL) {
 		game_update_and_render = (GAME_UPDATE_AND_RENDER)GetProcAddress(GAME_DLL, "game_update_and_render");
@@ -51,11 +56,51 @@ bool win32_load_app() {
 }
 
 LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
+#define KEY_DOWN(win32_key, key) \
+	case win32_key: INPUTS.key = true; break;
+#define KEY_UP(win32_key, key) \
+	case win32_key: INPUTS.key = false; break;
+
 	switch (message) {
 		case WM_DESTROY: {
 			PostQuitMessage(0);
 		} return 0;
+		case WM_KEYDOWN: {
+			switch (w_param) {
+				KEY_DOWN(VK_F1, f1)
+				KEY_DOWN(VK_F2, f2)
+				KEY_DOWN(VK_F3, f3)
+				KEY_DOWN(VK_F4, f4)
+				KEY_DOWN(VK_F5, f5)
+				KEY_DOWN(VK_F6, f6)
+				KEY_DOWN(VK_F7, f7)
+				KEY_DOWN(VK_F8, f8)
+				KEY_DOWN(VK_F9, f9)
+				KEY_DOWN(VK_F10, f10)
+				KEY_DOWN(VK_F11, f11)
+				KEY_DOWN(VK_F12, f12)
+			}
+		} break;
+		case WM_KEYUP: {
+			switch (w_param) {
+				KEY_UP(VK_F1, f1)
+				KEY_UP(VK_F2, f2)
+				KEY_UP(VK_F3, f3)
+				KEY_UP(VK_F4, f4)
+				KEY_UP(VK_F5, f5)
+				KEY_UP(VK_F6, f6)
+				KEY_UP(VK_F7, f7)
+				KEY_UP(VK_F8, f8)
+				KEY_UP(VK_F9, f9)
+				KEY_UP(VK_F10, f10)
+				KEY_UP(VK_F11, f11)
+				KEY_UP(VK_F12, f12)
+			}
+		} break;
 	}
+
+#undef KEY_DOWN
+#undef KEY_UP
 
 	return DefWindowProc(window, message, w_param, l_param);
 }
@@ -98,7 +143,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 	ShowWindow(window, cmd_show);
 
 	win32_load_app();
-	uint64 prev_load_time = platform_get_file_modified_time("build/pixel_tracer.dll");
+	uint64 prev_load_time = platform_get_file_modified_time(GAME_PATH);
 
 	VulkanPlatformData vulkan_platform_data = win32_init_vulkan(window, instance);
 
@@ -140,10 +185,10 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			frame_count = 0;
 		}
 
-		uint64 load_time = platform_get_file_modified_time("build/pixel_tracer.dll");
+		uint64 load_time = platform_get_file_modified_time(GAME_PATH);
 		if (load_time != prev_load_time) {
 			// Check if file is in use by another process
-			FILE* file = CreateFileA("build/pixel_tracer.dll", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			FILE* file = CreateFileA(GAME_PATH, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (file) {
 				CloseHandle(file);
 				if (win32_load_app()) {
@@ -165,7 +210,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 			DispatchMessage(&message);
 		}
 
-		game_update_and_render();
+		game_update_and_render(INPUTS);
 
 		frame_count++;
 	}
