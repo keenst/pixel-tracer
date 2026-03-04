@@ -31,3 +31,6 @@ char* platform_read_file(char* path, uint32* out_size);
 int platform_message_box(char* caption, char* text, MessageBoxType type);
 void platform_quit();
 uint64 platform_get_file_modified_time(char* path);
+// Returns array that ends with NULL for easy iteration.
+char** platform_read_dir(char* path);
+float platform_get_time_ms();

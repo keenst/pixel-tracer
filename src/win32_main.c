@@ -5,7 +5,7 @@ uint32 WINDOW_HEIGHT = 900;
 
 typedef void (*GAME_UPDATE_AND_RENDER)(Inputs inputs);
 GAME_UPDATE_AND_RENDER game_update_and_render;
-typedef void (*GAME_INIT)(PlatformData*, VulkanPlatformData, void*);
+typedef void (*GAME_INIT)(PlatformData*, VulkanPlatformData, void*, uint);
 GAME_INIT game_init;
 
 char* GAME_PATH = "../build/pixel_tracer.dll";
@@ -154,9 +154,10 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		.total_time = 0
 	};
 
-	void* game_memory = VirtualAlloc(NULL, 1024 * 1024 * 1024, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	uint game_memory_size = 1024 * 1024 * 1024;
+	void* game_memory = VirtualAlloc(NULL, game_memory_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-	game_init(&platform_data, vulkan_platform_data, game_memory);
+	game_init(&platform_data, vulkan_platform_data, game_memory, game_memory_size);
 
 	double last_update_time = win32_get_time_ms();
 	double frame_time;
@@ -195,7 +196,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 					prev_load_time = load_time;
 
 					system("cls");
-					game_init(&platform_data, vulkan_platform_data, game_memory);
+					game_init(&platform_data, vulkan_platform_data, game_memory, game_memory_size);
 				}
 			}
 		}

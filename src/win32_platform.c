@@ -17,6 +17,7 @@ char* platform_read_file(char* path, uint32* out_size) {
 
 	uint32 file_size = GetFileSize(file, NULL);
 
+	// TODO: Fix this memory leak somehow?
 	char* buffer = malloc(file_size);
 	ReadFile(file, buffer, file_size, NULL, NULL);
 
@@ -59,4 +60,48 @@ uint64 platform_get_file_modified_time(char* path) {
 	};
 
 	return integer_time.QuadPart;
+}
+
+char** platform_read_dir(char* path) {
+	WIN32_FIND_DATA find_data;
+	HANDLE handle;
+
+	// Get file count
+	uint32 file_count = 0;
+	handle = FindFirstFile(path, &find_data);
+	do {
+		if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+			file_count++;
+		}
+	} while (FindNextFile(handle, &find_data));
+
+	char** files = malloc((file_count + 1) * sizeof(char*));
+
+	// Get file names
+	uint32 file_index = 0;
+	handle = FindFirstFile(path, &find_data);
+	do {
+		if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+			const char* file_name = find_data.cFileName;
+			uint32 file_name_len = strlen(file_name) + 1;
+
+			files[file_index] = malloc(file_name_len);
+			memcpy(files[file_index], file_name, file_name_len + 1);
+			file_index++;
+		}
+	} while (FindNextFile(handle, &find_data));
+
+	FindClose(handle);
+
+	files[file_count] = NULL;
+	return files;
+}
+
+float platform_get_time_ms()
+{
+	LARGE_INTEGER count;
+	QueryPerformanceCounter(&count);
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+	return (count.QuadPart / (float)frequency.QuadPart) * 1000.0f;
 }

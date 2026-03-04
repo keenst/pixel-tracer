@@ -1,5 +1,4 @@
-#include "parse_obj.h"
-
+// Sets `end` to last char in float
 float parse_float(char* string, char** end) {
 	float parsed_value = 0;
 
@@ -41,73 +40,136 @@ float parse_float(char* string, char** end) {
 	return parsed_value / powf(10, decimals);
 }
 
+Face parse_f(char* line_start) {
+	// Skip 'f '
+	char* c = line_start + 2;
+
+	Face face;
+	FOR(i, 3) {
+		face.v.arr[i] = (int)parse_float(c, &c) - 1;
+		c++;
+		face.vt.arr[i] = (int)parse_float(c, &c) - 1;
+		c++;
+		face.vn.arr[i] = (int)parse_float(c, &c) - 1;
+		c++;
+	}
+
+	return face;
+}
+
+Vec3 parse_v(char* line_start) {
+	// Skip 'v '
+	char* c = line_start + 2;
+
+	Vec3 pos;
+	FOR(i, 3) {
+		pos.arr[i] = parse_float(c, &c);
+		c++;
+	}
+
+	return pos;
+}
+
+Vec2 parse_vt(char* line_start) {
+	// Skip 'vt '
+	char* c = line_start + 3;
+
+	Vec2 tex_coord;
+	FOR(i, 2) {
+		tex_coord.arr[i] = parse_float(c, &c);
+		c++;
+	}
+
+	return tex_coord;
+}
+
+Vec3 parse_vn(char* line_start) {
+	// Skip 'vn '
+	char* c = line_start + 3;
+
+	Vec3 normal;
+	FOR(i, 3) {
+		normal.arr[i] = parse_float(c, &c);
+		c++;
+	}
+
+	return normal;
+}
+
 uint32 parse_obj(char* file_contents, Triangle** out_triangles) {
-	// Count vertices
-	uint32 face_count = 0;
-	uint32 indexed_vertex_count = 0;
+	// Count
+	uint num_f = 0;
+	uint num_v = 0;
+	uint num_vn = 0;
+	uint num_vt = 0;
+
 	for (char* c = file_contents; *c != EOF && *c != '\0'; c++) {
 		switch (*c) {
-			case 'f': face_count++; break;
-			case 'v': indexed_vertex_count++; break;
+			case 'f': num_f++; break;
+			case 'v': {
+				switch (*(c + 1)) {
+					case 'n': num_vn++; break;
+					case 't': num_vt++; break;
+					case ' ': num_v++; break;
+				}
+			} break;
 		}
 	}
 
-	// Parse vertices
-	Float3* indexed_vertices = malloc(indexed_vertex_count * sizeof(Float3));
-	UInt3* faces = malloc(face_count * sizeof(UInt3));
+	Face* f = alloc(num_f * sizeof(Face));
+	Vec3* v = alloc(num_v * sizeof(Vec3));
+	Vec3* vn = alloc(num_vn * sizeof(Vec3));
+	Vec2* vt = alloc(num_vt * sizeof(Vec2));
 
-	char* c = file_contents;
-	uint32 indexed_vertex_index = 0;
-	uint32 face_index = 0;
+	// Parse
+	uint f_index;
+	uint v_index;
+	uint vn_index;
+	uint vt_index;
+
+	char* line_start = file_contents;
 	while (true) {
-		switch (*c) {
-			case 'v': { // Vertex
-				Float3 vertex;
-				char* next_char;
+		if (*line_start == '\0') break;
 
-				c += 2; // Skip v and first space
-				FOR(i, 3) {
-					vertex.array[i] = parse_float(c, &next_char);
-					c = next_char + 1; // Skip space / newline
-				}
-
-				indexed_vertices[indexed_vertex_index++] = vertex;
-			} break;
+		// Parse line
+		switch (*line_start) {
 			case 'f': {
-				UInt3 face;
-				char* next_char;
-
-				c += 2; // Skip f and first space
-				FOR(i, 3) {
-					face.array[i] = (uint32)parse_float(c, &next_char) - 1;
-					c = next_char + 1; // Skip space / newline
-				}
-
-				faces[face_index++] = face;
+				f[f_index++] = parse_f(line_start);
 			} break;
-			case '\r': case '\n': c++; continue;
-			default: { // Skip to next line
-				while (*c != '\n' && *c != '\r') {
-					if (*c == EOF) {
-						goto done_parsing;
-					}
-
-					c++;
+			case 'v': {
+				switch (*(line_start + 1)) {
+					case ' ': {
+						v[v_index++] = parse_v(line_start);
+					} break;
+					case 't': {
+						vt[vt_index++] = parse_vt(line_start);
+					} break;
+					case 'n': {
+						vn[vn_index++] = parse_vn(line_start);
+					} break;
 				}
-				c++;
 			} break;
 		}
+
+		// Go to next line
+		while (*line_start != '\n') {
+			line_start++;
+		}
+		line_start++;
 	}
 
-	done_parsing:;
+	Triangle* triangles = alloc(num_f * sizeof(Triangle));
+	FOR(face_index, num_f) {
+		Triangle* triangle = &triangles[face_index];
+		Face face = f[face_index];
 
-	Triangle* triangles = malloc(face_count * sizeof(Triangle));
-	FOR(tri_index, face_count) {
 		FOR(vert_index, 3) {
-			triangles[tri_index].vertices[vert_index] = indexed_vertices[faces[tri_index].array[vert_index]];
+			triangle->vertices[vert_index].position = v[face.v.arr[vert_index]];
+			triangle->vertices[vert_index].normal = vn[face.vn.arr[vert_index]];
+			triangle->vertices[vert_index].tex_coord = vt[face.vt.arr[vert_index]];
 		}
 	}
 
 	*out_triangles = triangles;
-	return face_count;
+	return num_f;
 }

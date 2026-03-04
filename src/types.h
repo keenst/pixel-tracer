@@ -7,13 +7,4 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-typedef union {
-	float array[3];
-	struct { float x, y, z; };
-	struct { float r, g, b; };
-} Float3;
-
-typedef union {
-	uint32 array[3];
-	struct { uint32 x, y, z; };
-} UInt3;
+typedef unsigned int uint;

@@ -107,6 +107,51 @@ char* stringify_vulkan_result(VkResult res) {
 // `__builtin_debugtrap()` is clang-specific.
 // The IDs for the buttons are windows-specific (create a layer for this, just like with the message box type).
 #ifndef NDEBUG
+#define _ASSERT(title, message) \
+	uint32 button = platform_message_box(title, message, MBOX_ASSERTION); \
+	if (button == 3) { /* IDABORT */ \
+		platform_quit(); \
+	} else if (button == 4) /* IDRETRY */ { \
+		__builtin_debugtrap(); \
+	}
+#else
+#define _ASSERT()
+#endif
+
+#ifndef NDEBUG
+#define ASSERT(expression) \
+	if (!(expression)) \
+	{ \
+		char _message_[256]; \
+		sprintf(_message_, \
+				"Assertion failed:\n" \
+				"Expression: \"" #expression "\"\n" \
+				"File: " __FILE__ ":%i\n\n", \
+				__LINE__); \
+		_ASSERT("Assertion", _message_); \
+	}
+#else
+#define ASSERT()
+#endif
+
+#ifndef NDEBUG
+#define TRAP(message, ...) \
+	{ \
+		char _message_[256]; \
+		sprintf(_message_, message, __VA_ARGS__); \
+		char _trap_message_[256]; \
+		sprintf(_trap_message_, \
+				"Program hit a trap:\n" \
+				"File: " __FILE__ ":%i\n\n" \
+				"%s\n", \
+				__LINE__, _message_); \
+		_ASSERT("Trap", _trap_message_); \
+	}
+#else
+#define TRAP()
+#endif
+
+#ifndef NDEBUG
 #define VK_ASSERT(function) \
 	{ \
 		VkResult res = function; \
@@ -118,12 +163,7 @@ char* stringify_vulkan_result(VkResult res) {
 					"Result: %s\n\n" \
 					#function, \
 					__LINE__, stringify_vulkan_result(res)); \
-			uint32 button = platform_message_box("Vulkan Assertion", text, MBOX_ASSERTION); \
-			if (button == 3) { /* IDABORT */ \
-				platform_quit(); \
-			} else if (button == 4) /* IDRETRY */ { \
-				__builtin_debugtrap(); \
-			} \
+			_ASSERT("Vulkan Assertion", text); \
 		} \
 	}
 #else

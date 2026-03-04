@@ -1,6 +1,15 @@
 enum { MAX_FRAMES_IN_FLIGHT = 2 };
-enum { MAX_TRIANGLE_BUFFER_COUNT = 256 };
+enum { MAX_TRIANGLE_BUFFER_COUNT = 4096 };
 enum { MAX_BVH_BUFFER_COUNT = 4096 };
+enum { MAX_OBJECT_BUFFER_COUNT = 64 };
+
+typedef struct {
+	Mat4 transform;
+	Mat4 inv_transform;
+	uint32 bvh_root_offset;
+	uint32 triangle_offset;
+	int32 pad[2];
+} RenderObject;
 
 typedef struct {
 	bool is_initialized;
@@ -24,6 +33,9 @@ typedef struct {
 	VkBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
 	VkDeviceMemory renderer_state_buffers_memory[MAX_FRAMES_IN_FLIGHT];
 	void* renderer_state_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
+	VkBuffer object_buffers[MAX_FRAMES_IN_FLIGHT];
+	VkDeviceMemory object_buffers_memory[MAX_FRAMES_IN_FLIGHT];
+	void* object_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
 	VkBuffer triangle_buffer;
 	VkDeviceMemory triangle_buffer_memory;
 	void* triangle_buffer_mapped;
@@ -64,13 +76,12 @@ typedef struct {
 } VulkanState;
 
 typedef struct {
-	Float3 pixel_delta_u;
+	Vec3 pixel_delta_u;
 	byte pad_0[4];
-	Float3 pixel_delta_v;
+	Vec3 pixel_delta_v;
 	byte pad_1[4];
-	Float3 first_pixel_location;
+	Vec3 first_pixel_location;
 	uint32 sample_count;
 	float time;
-	uint32 num_triangles;
-	uint32 num_bvh_nodes;
+	uint32 num_objects;
 } RendererState;

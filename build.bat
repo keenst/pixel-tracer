@@ -1,5 +1,7 @@
 @echo off
 
+set ARGS=-I ..\external -l user32.lib -g -std=c99 -Wno-format-security
+
 IF NOT EXIST build (mkdir build)
 pushd build
 
@@ -12,12 +14,12 @@ IF EXIST "win32_pixel_tracer.exe" (
 		GOTO :SKIP_EXE
 	)
 )
-clang -std=c99 ..\src\win32_build.c ..\src\win32_platform.c -o win32_pixel_tracer.exe -I ..\external -l user32.lib -g
+clang ..\src\win32_build.c ..\src\win32_platform.c -o win32_pixel_tracer.exe %ARGS%
 :SKIP_EXE
 
 :: app
 :: cl ..\src\main.c /Zi /Fd:pixel_tracer /Fe:pixel_tracer /LD
-clang -std=c99 ..\src\build.c ..\src\win32_platform.c -o pixel_tracer.dll -shared -I ..\external -l user32.lib -g
+clang ..\src\build.c ..\src\win32_platform.c -o pixel_tracer.dll -shared %ARGS%
 
 :: cleanup
 IF EXIST *.obj (del *.obj)
@@ -27,7 +29,7 @@ IF EXIST *.lib (del *.lib)
 
 :: shaders
 slangc ..\src\triangle.slang -g -target spirv -o ..\data\shaders\triangle.spv
-slangc ..\src\trace.slang -g -target spirv -o ..\data\shaders\trace.spv
-slangc ..\src\trace_debug.slang -g -target spirv -o ..\data\shaders\trace_debug.spv
+slangc ..\src\main_entry.slang -g -target spirv -o ..\data\shaders\main.spv
+slangc ..\src\debug_entry.slang -g -target spirv -o ..\data\shaders\debug.spv
 
 popd

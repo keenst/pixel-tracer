@@ -1,5 +1,3 @@
-#include "vulkan.h"
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL vulkan_debug_callback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
 		VkDebugUtilsMessageTypeFlagsEXT message_type,
@@ -695,12 +693,13 @@ VulkanState setup_renderer(
 		sampler_pool_size,
 		compute_pool_size,
 		storage_buffer_pool_size,
+		storage_buffer_pool_size,
 		storage_buffer_pool_size
 	};
 
 	VkDescriptorPoolCreateInfo pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.poolSizeCount = 5,
+		.poolSizeCount = 6,
 		.pPoolSizes = pool_sizes,
 		.maxSets = MAX_FRAMES_IN_FLIGHT * 2
 	};
@@ -992,7 +991,7 @@ VulkanState setup_renderer(
 
 	// Shader
 	uint32 compute_shader_code_size;
-	char* compute_shader_code = platform_read_file("shaders/trace.spv", &compute_shader_code_size);
+	char* compute_shader_code = platform_read_file("shaders/main.spv", &compute_shader_code_size);
 
 	VkShaderModuleCreateInfo compute_shader_create_info = {
 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1039,16 +1038,24 @@ VulkanState setup_renderer(
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
+	VkDescriptorSetLayoutBinding object_buffer_layout_binding = {
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
 	VkDescriptorSetLayoutBinding compute_descriptor_set_layout_bindings[] = {
 		rw_texture_layout_binding,
 		uniform_buffer_layout_binding,
 		triangle_buffer_layout_binding,
-		bvh_buffer_layout_binding
+		bvh_buffer_layout_binding,
+		object_buffer_layout_binding
 	};
 
 	VkDescriptorSetLayoutCreateInfo compute_descriptor_set_layout_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 4,
+		.bindingCount = 5,
 		.pBindings = compute_descriptor_set_layout_bindings
 	};
 
@@ -1091,11 +1098,25 @@ VulkanState setup_renderer(
 				vulkan_state.renderer_state_buffers_memory[i],
 				0, sizeof(RendererState),
 				0, &vulkan_state.renderer_state_buffers_mapped[i]);
+
+		create_buffer(
+				&vulkan_state,
+				MAX_OBJECT_BUFFER_COUNT * sizeof(RenderObject),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				&vulkan_state.object_buffers[i],
+				&vulkan_state.object_buffers_memory[i]);
+
+		vkMapMemory(
+				vulkan_state.device,
+				vulkan_state.object_buffers_memory[i],
+				0, MAX_OBJECT_BUFFER_COUNT * sizeof(RenderObject),
+				0, &vulkan_state.object_buffers_mapped[i]);
 	}
 
 	create_buffer(
 			&vulkan_state,
-			sizeof(Triangle) * MAX_TRIANGLE_BUFFER_COUNT,
+			sizeof(GPUTriangle) * MAX_TRIANGLE_BUFFER_COUNT,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			&vulkan_state.triangle_buffer,
@@ -1104,7 +1125,7 @@ VulkanState setup_renderer(
 	vkMapMemory(
 			vulkan_state.device,
 			vulkan_state.triangle_buffer_memory,
-			0, sizeof(Triangle) * MAX_TRIANGLE_BUFFER_COUNT,
+			0, sizeof(GPUTriangle) * MAX_TRIANGLE_BUFFER_COUNT,
 			0, &vulkan_state.triangle_buffer_mapped);
 
 	create_buffer(
@@ -1147,7 +1168,13 @@ VulkanState setup_renderer(
 			.range = VK_WHOLE_SIZE
 		};
 
-		VkWriteDescriptorSet write_descriptors[4];
+		VkDescriptorBufferInfo object_buffer_info = {
+			.buffer = vulkan_state.object_buffers[i],
+			.offset = 0,
+			.range = VK_WHOLE_SIZE
+		};
+
+		VkWriteDescriptorSet write_descriptors[5];
 
 		write_descriptors[0] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1189,7 +1216,17 @@ VulkanState setup_renderer(
 			.pBufferInfo = &bvh_buffer_info
 		};
 
-		vkUpdateDescriptorSets(vulkan_state.device, 4, write_descriptors, 0, NULL);
+		write_descriptors[4] = (VkWriteDescriptorSet){
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vulkan_state.compute_descriptor_sets[i],
+			.dstBinding = 4,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo = &object_buffer_info
+		};
+
+		vkUpdateDescriptorSets(vulkan_state.device, 5, write_descriptors, 0, NULL);
 	}
 
 	// Pipeline

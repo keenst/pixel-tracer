@@ -34,5 +34,5 @@ VertexInfo vertexMain(int vertex_index : SV_VertexID) {
 
 [shader("fragment")]
 float4 fragmentMain(VertexInfo vertex_info) : SV_Target {
-	return test_sampler[float2(320, 180) * vertex_info.texture_coordinate];
+	return test_sampler[(int2)(float2(320, 180) * vertex_info.texture_coordinate)];
 }
