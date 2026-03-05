@@ -83,6 +83,8 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 		render_object->bvh_root_offset = global->meshes[object->mesh_id].root_node_offset;
 		render_object->triangle_offset = global->meshes[object->mesh_id].triangle_offset;
+
+		render_object->material = object->material;
 	}
 
 	memcpy(
@@ -333,10 +335,16 @@ void game_start() {
 	Object* suz = register_object("suz");
 	suz->mesh_id = get_mesh_id("suzanne.obj");
 	suz->position = vec3(0, 0, -4);
+	suz->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
 
 	Object* anne = register_object("anne");
 	anne->mesh_id = get_mesh_id("cube_cool.obj");
 	anne->position = vec3(2, 0, -2);
+	anne->material = (Material){
+		.color = vec3(1, 0, 0)
+	};
 }
 
 __declspec(dllexport)
@@ -469,6 +477,14 @@ void game_init(
 					gpu_triangle.vertices[j].position.arr,
 					global->triangle_buffer[i].vertices[j].position.arr,
 					3 * sizeof(float));
+			memcpy(
+					gpu_triangle.vertices[j].normal.arr,
+					global->triangle_buffer[i].vertices[j].normal.arr,
+					3 * sizeof(float));
+			memcpy(
+					gpu_triangle.vertices[j].tex_coord.arr,
+					global->triangle_buffer[i].vertices[j].tex_coord.arr,
+					2 * sizeof(float));
 		}
 
 		memcpy(

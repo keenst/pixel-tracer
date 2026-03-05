@@ -73,7 +73,6 @@ bool ray_vs_aabb(Ray ray, float3 aabb_min, float3 aabb_max, out HitInfo hit_info
 	}
 
 	hit_info.hit = true;
-	hit_info.color = float3(1, 1, 1);
 	hit_info.t = t_min;
 	return true;
 }
@@ -165,10 +164,11 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 
 	// Return
 	hit_info.hit = true;
-	hit_info.normal = normalize(normal);
-	hit_info.color = float3(1, 1, 1);
-	hit_info.intersect_point = intersection_point;
 	hit_info.t = t;
+	hit_info.intersect_point = intersection_point;
+	hit_info.tri = tri;
+	hit_info.u = u;
+	hit_info.v = v;
 	return true;
 }
 
@@ -232,10 +232,18 @@ bool hit_mesh_bvh(
 	}
 
 	if (closest_hit.hit) {
+		Tri tri = closest_hit.tri;
+		float u = closest_hit.u;
+		float v = closest_hit.v;
+		float w = 1 - u - v;
+		float3 normal = u * tri.verts[0].normal + v * tri.verts[1].normal + w * tri.verts[2].normal;
+
 		out_result = {};
-		out_result.ray.direction = closest_hit.normal + random_unit_vector();
-		out_result.ray.start = closest_hit.intersect_point + closest_hit.normal * 1e-6f;
+		out_result.ray.direction = normal + random_unit_vector();
+		out_result.ray.start = closest_hit.intersect_point + normal * 1e-6f;
 		out_result.t = closest_hit.t;
+		out_result.u = closest_hit.u;
+		out_result.v = closest_hit.v;
 		return true;
 	}
 

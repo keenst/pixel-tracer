@@ -11,6 +11,7 @@ typedef struct {
 	Vec3 position;
 	Vec3 orientation;
 	MeshID mesh_id;
+	Material material;
 } Object;
 
 typedef struct {

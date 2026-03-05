@@ -4,11 +4,17 @@ enum { MAX_BVH_BUFFER_COUNT = 4096 };
 enum { MAX_OBJECT_BUFFER_COUNT = 64 };
 
 typedef struct {
+	Vec3 color;
+	float pad;
+} Material;
+
+typedef struct {
 	Mat4 transform;
 	Mat4 inv_transform;
 	uint32 bvh_root_offset;
 	uint32 triangle_offset;
-	int32 pad[2];
+	int32 pad_0[2];
+	Material material;
 } RenderObject;
 
 typedef struct {
