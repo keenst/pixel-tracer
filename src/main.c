@@ -26,7 +26,12 @@ MeshID get_mesh_id(const char* name) {
 Object* register_object(const char* name) {
 	ASSERT(strlen(name) <= NAME_LEN);
 	snprintf(global->object_names[global->num_objects], NAME_LEN, name);
-	return &global->objects[global->num_objects++];
+
+	Object* object = &global->objects[global->num_objects++];
+	object->scale = vec3(1, 1, 1);
+	object->scene_id = global->current_scene_id;
+
+	return object;
 }
 
 Object* get_object(const char* name) {
@@ -50,8 +55,12 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	RenderObject* render_objects = alloc(global->num_objects * sizeof(RenderObject));
 
 	global->renderer_state.num_objects = global->num_objects;
+	uint light_index = 0;
+	uint non_light_index = 0;
 	FOR(object_index, global->num_objects) {
 		Object* object = global->objects + object_index;
+
+		if (object->scene_id != global->current_scene_id) continue;
 
 		Mat4 translation = {
 			1, 0, 0, object->position.x,
@@ -74,10 +83,38 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 		Mat4 inv_rotation = mat4_transpose(rotation);
 
-		Mat4 transform = mat4_mul(translation, rotation);
-		Mat4 inv_transform = mat4_mul(inv_rotation, inv_translation);
+		Mat4 scale = {
+			object->scale.x, 0, 0, 0,
+			0, object->scale.y, 0, 0,
+			0, 0, object->scale.z, 0,
+			0, 0, 0, 1
+		};
 
-		RenderObject* render_object = &render_objects[object_index];
+		Mat4 inv_scale = {
+			1.0f / object->scale.x, 0, 0, 0,
+			0, 1.0f / object->scale.y, 0, 0,
+			0, 0, 1.0f / object->scale.z, 0,
+			0, 0, 0, 1
+		};
+
+		Mat4 transform = mat4_mul(mat4_mul(translation, rotation), scale);
+		Mat4 inv_transform = mat4_mul(inv_scale, mat4_mul(inv_rotation, inv_translation));
+
+		// Pick a slot for the object
+		// If emissive start from front, otherwise start from back
+		RenderObject* render_object;
+		Vec3 color = object->material.color;
+		if (color.r > 1 + 1e-5 || color.g > 1 + 1e-5 || color.b > 1 + 1e-5)
+		{
+			render_object = &render_objects[light_index];
+			light_index++;
+		}
+		else
+		{
+			render_object = &render_objects[global->num_objects - non_light_index - 1];
+			non_light_index++;
+		}
+
 		render_object->transform = transform;
 		render_object->inv_transform = inv_transform;
 
@@ -86,6 +123,8 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 		render_object->material = object->material;
 	}
+
+	global->renderer_state.num_lights = light_index;
 
 	memcpy(
 			global->vulkan_state.object_buffers_mapped[global->current_frame],
@@ -242,6 +281,8 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	};
 
 	vkQueuePresentKHR(vulkan_state->present_queue, &present_info);
+
+	global->renderer_state.num_frames++;
 }
 
 void load_trace_shader(char* path) {
@@ -309,6 +350,16 @@ void game_update_and_render(Inputs inputs) {
 		}
 	}
 
+	FOR(i, 10) {
+		if (!inputs.nums[i] || global->prev_inputs.nums[i]) continue;
+		global->current_scene_id = i;
+	}
+
+	if (inputs.p && !global->prev_inputs.p) {
+		global->renderer_state.progressive ^= true;
+		global->renderer_state.num_frames = 1;
+	}
+ 
 	// Update
 	float total_time = global->platform_data->total_time;
 	float delta_time = global->platform_data->delta_time;
@@ -316,10 +367,6 @@ void game_update_and_render(Inputs inputs) {
 	Object* suz = get_object("suz");
 	suz->position.y = sinf(total_time);
 	suz->orientation.y += delta_time;
-
-	Object* anne = get_object("anne");
-	anne->orientation.z += delta_time / 2;
-	anne->orientation.y += delta_time;
 
 	// Draw
 	global->renderer_state.time = global->platform_data->total_time;
@@ -332,19 +379,117 @@ void game_update_and_render(Inputs inputs) {
 }
 
 void game_start() {
+	// Cornell box
+	global->current_scene_id = 1;
+
 	Object* suz = register_object("suz");
 	suz->mesh_id = get_mesh_id("suzanne.obj");
-	suz->position = vec3(0, 0, -4);
 	suz->material = (Material){
-		.color = vec3(1, 1, 1)
+		.color = vec3(0, 1, 0)
 	};
 
-	Object* anne = register_object("anne");
-	anne->mesh_id = get_mesh_id("cube_cool.obj");
-	anne->position = vec3(2, 0, -2);
-	anne->material = (Material){
+	Object* ground = register_object("ground");
+	ground->mesh_id = get_mesh_id("plane.obj");
+	ground->position = vec3(0, -5, 0);
+	ground->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
+	ground->scale = vec3(5, 1, 5);
+
+	Object* ceiling = register_object("ceiling");
+	ceiling->mesh_id = get_mesh_id("plane.obj");
+	ceiling->position = vec3(0, 5, 0);
+	ceiling->orientation = vec3(tau, 0, 0);
+	ceiling->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
+	ceiling->scale = vec3(5, 1, 5);
+
+	Object* wall_left = register_object("wall_left");
+	wall_left->mesh_id = get_mesh_id("plane.obj");
+	wall_left->position = vec3(-5, 0, 0);
+	wall_left->orientation = vec3(pi, 0, 0);
+	wall_left->material = (Material){
 		.color = vec3(1, 0, 0)
 	};
+	wall_left->scale = vec3(5, 1, 5);
+
+	Object* wall_right = register_object("wall_right");
+	wall_right->mesh_id = get_mesh_id("plane.obj");
+	wall_right->position = vec3(5, 0, 0);
+	wall_right->orientation = vec3(pi, 0, 0);
+	wall_right->material = (Material){
+		.color = vec3(0, 1, 0)
+	};
+	wall_right->scale = vec3(5, 1, 5);
+
+	Object* wall_back = register_object("wall_back");
+	wall_back->mesh_id = get_mesh_id("plane.obj");
+	wall_back->position = vec3(0, 0, 5);
+	wall_back->orientation = vec3(pi, 0, 0);
+	wall_back->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
+	wall_back->scale = vec3(5, 1, 5);
+
+	Object* light = register_object("light");
+	light->mesh_id = get_mesh_id("plane.obj");
+	light->position = vec3(0, 4.9, 0);
+	light->orientation = vec3(tau, 0, 0);
+	light->material = (Material){
+		.color = vec3(2, 2, 2)
+	};
+	light->scale = vec3(1, 1, 1);
+
+	// Monkey
+	global->current_scene_id = 0;
+
+	Object* top_light = register_object("top_light");
+	top_light->mesh_id = get_mesh_id("plane.obj");
+	top_light->material = (Material){
+		.color = vec3(3, 3, 3)
+	};
+	top_light->orientation = vec3(pi, pi / 4, 0);
+	top_light->position = vec3(0, 5, 0);
+	top_light->scale = vec3(2, 1, 2);
+
+	Object* bottom_light = register_object("bottom_light");
+	bottom_light->mesh_id = get_mesh_id("plane.obj");
+	bottom_light->material = (Material){
+		.color = vec3(3, 3, 3)
+	};
+	bottom_light->orientation = vec3(pi, pi / 4, pi);
+	bottom_light->position = vec3(0, -2, 0);
+	bottom_light->scale = vec3(2, 1, 2);
+
+	Object* lit_monkey = register_object("lit_monkey");
+	lit_monkey->mesh_id = get_mesh_id("suzanne.obj");
+	lit_monkey->material = (Material){
+		.color = vec3(1, 1, 0)
+	};
+
+	Object* lit_cube = register_object("lit_cube");
+	lit_cube->mesh_id = get_mesh_id("cube_cool.obj");
+	lit_cube->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
+	lit_cube->position = vec3(-3, -2, 0);
+
+	Object* lit_plane = register_object("lit_plane");
+	lit_plane->mesh_id = get_mesh_id("plane.obj");
+	lit_plane->material = (Material){
+		.color = vec3(1, 1, 1)
+	};
+	lit_plane->position = vec3(0, -2 - 1e-5f, 0);
+	lit_plane->scale = vec3(10, 1, 10);
+
+	Object* red_cube = register_object("red_cube");
+	red_cube->mesh_id = get_mesh_id("cube_cool.obj");
+	red_cube->material = (Material){
+		.color = vec3(1, 0, 0)
+	};
+	red_cube->position = vec3(3, -2, 0);
+	red_cube->scale = vec3(0.5f, 5, 1);
 }
 
 __declspec(dllexport)
@@ -457,6 +602,18 @@ void game_init(
 			.pixel_delta_v = pixel_delta_v,
 			.first_pixel_location = first_pixel_location
 		};
+
+		// Set up camera
+		Mat4 camera_transform;
+
+		Mat4 translation = {
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 5,
+			0, 0, 0, 1
+		};
+
+		global->renderer_state.camera_transform = translation;
 
 		game_start();
 	}

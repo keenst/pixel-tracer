@@ -25,6 +25,8 @@ typedef struct {
 typedef struct {
 	bool f1, f2, f3, f4, f5, f6,
 		 f7, f8, f9, f10, f11, f12;
+	bool nums[10];
+	bool p;
 } Inputs;
 
 char* platform_read_file(char* path, uint32* out_size);

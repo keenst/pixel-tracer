@@ -79,6 +79,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 				KEY_DOWN(VK_F10, f10)
 				KEY_DOWN(VK_F11, f11)
 				KEY_DOWN(VK_F12, f12)
+				KEY_DOWN('P', p)
+				default: {
+					if (w_param >= '0' && w_param <= '9') {
+						INPUTS.nums[w_param - '0'] = true;
+					}
+				} break;
 			}
 		} break;
 		case WM_KEYUP: {
@@ -95,6 +101,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 				KEY_UP(VK_F10, f10)
 				KEY_UP(VK_F11, f11)
 				KEY_UP(VK_F12, f12)
+				KEY_UP('P', p)
+				default: {
+					if (w_param >= '0' && w_param <= '9') {
+						INPUTS.nums[w_param - '0'] = false;
+					}
+				} break;
 			}
 		} break;
 	}

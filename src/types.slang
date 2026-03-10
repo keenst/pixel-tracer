@@ -5,6 +5,10 @@ struct RendererState {
 	uint sample_count;
 	float time;
 	uint num_objects;
+	uint num_lights;
+	uint num_frames;
+	float4x4 camera_transform;
+	bool progressive;
 }
 
 struct BVHNode {
@@ -47,7 +51,7 @@ struct HitInfo {
 struct HitResult {
 	float t;
 	Ray ray;
-	Object object;
+	uint object_index;
 	Tri tri;
 	float u;
 	float v;

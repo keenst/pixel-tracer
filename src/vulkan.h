@@ -84,10 +84,19 @@ typedef struct {
 typedef struct {
 	Vec3 pixel_delta_u;
 	byte pad_0[4];
+
 	Vec3 pixel_delta_v;
 	byte pad_1[4];
+
 	Vec3 first_pixel_location;
 	uint32 sample_count;
+
 	float time;
 	uint32 num_objects;
+	uint32 num_lights;
+	uint32 num_frames;
+
+	Mat4 camera_transform;
+
+	bool32 progressive;
 } RendererState;

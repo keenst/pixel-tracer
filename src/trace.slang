@@ -129,6 +129,14 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 
 	float3 normal = cross(v0v1, v0v2);
 
+	// NOTE: Not part of original algo, can be removed.
+	// Normal test
+	#if 0
+	if (dot(normal, ray.direction) > 0) {
+		return false;
+	}
+	#endif
+
 	// Plane intersection
 	float d = dot(v0, normal);
 	float t = (d - dot(ray.start, normal)) / dot(ray.direction, normal);
@@ -174,12 +182,15 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 
 bool hit_mesh_bvh(
 		Ray ray,
-		uint bvh_offset,
-		uint triangle_offset,
+		uint object_index,
 		out HitResult out_result,
 		IN_DEBUG(inout RayDebugInfo ray_debug_info)) {
 	float closest_t = 1.#INF;
 	HitInfo closest_hit = {};
+
+	Object object = object_buffer[object_index];
+	uint bvh_offset = object.bvh_root_offset;
+	uint triangle_offset = object.triangle_offset;
 
 	int current_node_index = 0;
 	int[64] nodes_to_visit = {};
@@ -238,12 +249,18 @@ bool hit_mesh_bvh(
 		float w = 1 - u - v;
 		float3 normal = u * tri.verts[0].normal + v * tri.verts[1].normal + w * tri.verts[2].normal;
 
+		if (dot(ray.direction, normal) > 0) {
+			out_result = {};
+			return false;
+		}
+
 		out_result = {};
 		out_result.ray.direction = normal + random_unit_vector();
 		out_result.ray.start = closest_hit.intersect_point + normal * 1e-6f;
 		out_result.t = closest_hit.t;
 		out_result.u = closest_hit.u;
 		out_result.v = closest_hit.v;
+		out_result.object_index = object_index;
 		return true;
 	}
 

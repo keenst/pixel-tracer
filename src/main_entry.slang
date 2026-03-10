@@ -13,7 +13,7 @@ uniform StructuredBuffer<Object> object_buffer;
 void main(int3 coords : SV_DispatchThreadID) {
 	RendererState state = renderer_state;
 
-	random_counter = fract(sin(coords.x * coords.y) * 1e5f);
+	random_counter = coords.x * coords.y * state.time;
 
 	const int max_depth = 4;
 
@@ -24,6 +24,9 @@ void main(int3 coords : SV_DispatchThreadID) {
 
 		Ray ray = {};
 		ray.direction = normalize(pixel_center);
+
+		ray.start = mul(float4(ray.start, 1), state.camera_transform).xyz;
+		ray.direction = mul(float4(ray.direction, 0), state.camera_transform).xyz;
 
 		// Iterate over bounces
 		float3[max_depth] path_colors = {};
@@ -38,31 +41,42 @@ void main(int3 coords : SV_DispatchThreadID) {
 			HitResult closest_hit = {};
 			closest_hit.t = 1.#INF;
 
-			FOR(obj_index, state.num_objects) {
-				Object object = object_buffer[obj_index];
+			FOR(object_index, state.num_objects) {
+				Object object = object_buffer[object_index];
 
 				Ray local_ray;
 				local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
 				local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
 
 				HitResult hit;
-				if (!hit_mesh_bvh(local_ray, object.bvh_root_offset, object.triangle_offset, hit)) continue;
+				if (!hit_mesh_bvh(local_ray, object_index, hit)) continue;
 
 				if (hit.t > closest_hit.t) continue;
 
 				closest_hit = hit;
-				closest_hit.object = object;
 				hit_something = true;
 			}
 
 			if (hit_something) {
-				ray.start = mul(float4(closest_hit.ray.start, 1), closest_hit.object.transform).xyz;
-				ray.direction = mul(float4(closest_hit.ray.direction, 0), closest_hit.object.transform).xyz;
-				path_colors[depth] = float3(1);
-				depth++;
+				Object object = object_buffer[closest_hit.object_index];
+
+				if (closest_hit.object_index < state.num_lights)
+				{
+					path_colors[depth] = object.material.color;
+					break;
+				}
+				else
+				{
+					ray.start = mul(float4(closest_hit.ray.start, 1), object.transform).xyz;
+					ray.direction = mul(float4(closest_hit.ray.direction, 0), object.transform).xyz;
+					path_colors[depth] = object.material.color;
+					depth++;
+				}
 			} else {
+				/*
 				float a = 0.5f * (ray.direction.y + 1);
 				path_colors[depth] = a * float3(0.5, 0.7, 1) + (1 - a) * float3(1, 1, 1);
+				*/
 				break;
 			}
 		}
@@ -75,5 +89,10 @@ void main(int3 coords : SV_DispatchThreadID) {
 		color += sample_color / state.sample_count;
 	}
 
-	render_texture[coords.xy] = float4(color, 1);
+	if (state.progressive) {
+		float4 tex_color = render_texture[coords.xy];
+		render_texture[coords.xy] = tex_color + (float4(color, 1) - tex_color) / state.num_frames;
+	} else {
+		render_texture[coords.xy] = float4(color, 1);
+	}
 }

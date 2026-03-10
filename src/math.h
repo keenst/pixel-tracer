@@ -1,3 +1,6 @@
+const float pi = 3.1415926535897932384626;
+const float tau = pi * 2;
+
 typedef union {
 	float arr[2];
 	struct { float x, y; };

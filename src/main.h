@@ -10,8 +10,10 @@ typedef uint32 MeshID;
 typedef struct {
 	Vec3 position;
 	Vec3 orientation;
+	Vec3 scale;
 	MeshID mesh_id;
 	Material material;
+	int scene_id;
 } Object;
 
 typedef struct {
@@ -37,6 +39,8 @@ typedef struct GlobalMemory_ {
 	uint64 prev_compute_shader_modified_time;
 	uint32 current_frame;
 	RenderMode current_render_mode;
+
+	int current_scene_id;
 
 	Object objects[64];
 	char object_names[NAME_LEN][64];

@@ -28,20 +28,19 @@ void main(int3 coords : SV_DispatchThreadID) {
 	HitResult closest_hit = {};
 	closest_hit.t = 1.#INF;
 
-	FOR(obj_index, state.num_objects) {
-		Object object = object_buffer[obj_index];
+	FOR(object_index, state.num_objects) {
+		Object object = object_buffer[object_index];
 
 		Ray local_ray;
 		local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
 		local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
 
 		HitResult hit;
-		if (!hit_mesh_bvh(local_ray, object.bvh_root_offset, object.triangle_offset, hit, ray_debug_info)) continue;
+		if (!hit_mesh_bvh(local_ray, object_index, hit, ray_debug_info)) continue;
 
 		if (hit.t > closest_hit.t) continue;
 
 		closest_hit = hit;
-		closest_hit.object = object;
 		hit_something = true;
 	}
 
