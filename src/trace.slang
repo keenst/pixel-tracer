@@ -255,7 +255,16 @@ bool hit_mesh_bvh(
 		}
 
 		out_result = {};
-		out_result.ray.direction = normal + random_unit_vector();
+
+		if (random() < object.material.roughness)
+		{
+			out_result.ray.direction = normal + random_unit_vector();
+		}
+		else
+		{
+			out_result.ray.direction = reflect(ray.direction, normal);
+		}
+
 		out_result.ray.start = closest_hit.intersect_point + normal * 1e-6f;
 		out_result.t = closest_hit.t;
 		out_result.u = closest_hit.u;

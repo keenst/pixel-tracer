@@ -30,6 +30,10 @@ Object* register_object(const char* name) {
 	Object* object = &global->objects[global->num_objects++];
 	object->scale = vec3(1, 1, 1);
 	object->scene_id = global->current_scene_id;
+	object->material = (Material){
+		.color = vec3(1, 1, 1),
+		.roughness = 0.5f
+	};
 
 	return object;
 }
@@ -384,52 +388,37 @@ void game_start() {
 
 	Object* suz = register_object("suz");
 	suz->mesh_id = get_mesh_id("suzanne.obj");
-	suz->material = (Material){
-		.color = vec3(0, 1, 0)
-	};
+	suz->material.color = vec3(0, 1, 0);
 
 	Object* ground = register_object("ground");
 	ground->mesh_id = get_mesh_id("plane.obj");
 	ground->position = vec3(0, -5, 0);
-	ground->material = (Material){
-		.color = vec3(1, 1, 1)
-	};
 	ground->scale = vec3(5, 1, 5);
 
 	Object* ceiling = register_object("ceiling");
 	ceiling->mesh_id = get_mesh_id("plane.obj");
 	ceiling->position = vec3(0, 5, 0);
 	ceiling->orientation = vec3(tau, 0, 0);
-	ceiling->material = (Material){
-		.color = vec3(1, 1, 1)
-	};
 	ceiling->scale = vec3(5, 1, 5);
 
 	Object* wall_left = register_object("wall_left");
 	wall_left->mesh_id = get_mesh_id("plane.obj");
 	wall_left->position = vec3(-5, 0, 0);
 	wall_left->orientation = vec3(pi, 0, 0);
-	wall_left->material = (Material){
-		.color = vec3(1, 0, 0)
-	};
+	wall_left->material.color = vec3(1, 0, 0);
 	wall_left->scale = vec3(5, 1, 5);
 
 	Object* wall_right = register_object("wall_right");
 	wall_right->mesh_id = get_mesh_id("plane.obj");
 	wall_right->position = vec3(5, 0, 0);
 	wall_right->orientation = vec3(pi, 0, 0);
-	wall_right->material = (Material){
-		.color = vec3(0, 1, 0)
-	};
+	wall_right->material.color = vec3(0, 1, 0);
 	wall_right->scale = vec3(5, 1, 5);
 
 	Object* wall_back = register_object("wall_back");
 	wall_back->mesh_id = get_mesh_id("plane.obj");
 	wall_back->position = vec3(0, 0, 5);
 	wall_back->orientation = vec3(pi, 0, 0);
-	wall_back->material = (Material){
-		.color = vec3(1, 1, 1)
-	};
 	wall_back->scale = vec3(5, 1, 5);
 
 	Object* light = register_object("light");
@@ -464,30 +453,20 @@ void game_start() {
 
 	Object* lit_monkey = register_object("lit_monkey");
 	lit_monkey->mesh_id = get_mesh_id("suzanne.obj");
-	lit_monkey->material = (Material){
-		.color = vec3(1, 1, 0)
-	};
+	lit_monkey->material.color = vec3(1, 1, 0);
 
 	Object* lit_cube = register_object("lit_cube");
 	lit_cube->mesh_id = get_mesh_id("cube_cool.obj");
-	lit_cube->material = (Material){
-		.color = vec3(1, 1, 1)
-	};
 	lit_cube->position = vec3(-3, -2, 0);
 
 	Object* lit_plane = register_object("lit_plane");
 	lit_plane->mesh_id = get_mesh_id("plane.obj");
-	lit_plane->material = (Material){
-		.color = vec3(1, 1, 1)
-	};
 	lit_plane->position = vec3(0, -2 - 1e-5f, 0);
 	lit_plane->scale = vec3(10, 1, 10);
 
 	Object* red_cube = register_object("red_cube");
 	red_cube->mesh_id = get_mesh_id("cube_cool.obj");
-	red_cube->material = (Material){
-		.color = vec3(1, 0, 0)
-	};
+	red_cube->material.color = vec3(1, 0, 0);
 	red_cube->position = vec3(3, -2, 0);
 	red_cube->scale = vec3(0.5f, 5, 1);
 }

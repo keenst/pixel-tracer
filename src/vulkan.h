@@ -5,7 +5,7 @@ enum { MAX_OBJECT_BUFFER_COUNT = 64 };
 
 typedef struct {
 	Vec3 color;
-	float pad;
+	float roughness;
 } Material;
 
 typedef struct {

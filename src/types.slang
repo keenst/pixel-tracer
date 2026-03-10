@@ -59,6 +59,7 @@ struct HitResult {
 
 struct Material {
 	float3 color;
+	float roughness;
 }
 
 struct Object {

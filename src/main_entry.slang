@@ -60,13 +60,10 @@ void main(int3 coords : SV_DispatchThreadID) {
 			if (hit_something) {
 				Object object = object_buffer[closest_hit.object_index];
 
-				if (closest_hit.object_index < state.num_lights)
-				{
+				if (closest_hit.object_index < state.num_lights) {
 					path_colors[depth] = object.material.color;
 					break;
-				}
-				else
-				{
+				} else {
 					ray.start = mul(float4(closest_hit.ray.start, 1), object.transform).xyz;
 					ray.direction = mul(float4(closest_hit.ray.direction, 0), object.transform).xyz;
 					path_colors[depth] = object.material.color;
