@@ -5,8 +5,10 @@
 uniform RWTexture2D<float4> render_texture;
 uniform RendererState renderer_state;
 uniform StructuredBuffer<Tri> triangle_buffer;
-uniform StructuredBuffer<BVHNode> bvh_buffer;
+uniform StructuredBuffer<BVHNode> mesh_bvh_buffer;
 uniform StructuredBuffer<Object> object_buffer;
+uniform StructuredBuffer<uint32_t> object_index_buffer;
+uniform StructuredBuffer<BVHNode> scene_bvh_buffer;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -41,26 +43,30 @@ void main(int3 coords : SV_DispatchThreadID) {
 			HitResult closest_hit = {};
 			closest_hit.t = 1.#INF;
 
+			hit_something = hit_scene_bvh(ray, closest_hit);
+
+#if 0
 			FOR(object_index, state.num_objects) {
-				Object object = object_buffer[object_index];
+				Object object = object_buffer[object_index_buffer[object_index]];
 
 				Ray local_ray;
 				local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
 				local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
 
 				HitResult hit;
-				if (!hit_mesh_bvh(local_ray, object_index, hit)) continue;
+				if (!hit_mesh_bvh(local_ray, object_index_buffer[object_index], hit)) continue;
 
 				if (hit.t > closest_hit.t) continue;
 
 				closest_hit = hit;
 				hit_something = true;
 			}
+#endif
 
 			if (hit_something) {
 				Object object = object_buffer[closest_hit.object_index];
 
-				if (closest_hit.object_index < state.num_lights) {
+				if (object.is_light) {
 					path_colors[depth] = object.material.color;
 					break;
 				} else {
@@ -70,10 +76,8 @@ void main(int3 coords : SV_DispatchThreadID) {
 					depth++;
 				}
 			} else {
-				/*
 				float a = 0.5f * (ray.direction.y + 1);
-				path_colors[depth] = a * float3(0.5, 0.7, 1) + (1 - a) * float3(1, 1, 1);
-				*/
+				//path_colors[depth] = a * float3(0.5, 0.7, 1) + (1 - a) * float3(1, 1, 1);
 				break;
 			}
 		}

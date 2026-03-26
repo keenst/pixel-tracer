@@ -694,12 +694,14 @@ VulkanState setup_renderer(
 		compute_pool_size,
 		storage_buffer_pool_size,
 		storage_buffer_pool_size,
+		storage_buffer_pool_size,
+		storage_buffer_pool_size,
 		storage_buffer_pool_size
 	};
 
 	VkDescriptorPoolCreateInfo pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.poolSizeCount = 6,
+		.poolSizeCount = 8,
 		.pPoolSizes = pool_sizes,
 		.maxSets = MAX_FRAMES_IN_FLIGHT * 2
 	};
@@ -1031,7 +1033,7 @@ VulkanState setup_renderer(
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
-	VkDescriptorSetLayoutBinding bvh_buffer_layout_binding = {
+	VkDescriptorSetLayoutBinding mesh_bvh_buffer_layout_binding = {
 		.binding = 3,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
@@ -1045,17 +1047,33 @@ VulkanState setup_renderer(
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
+	VkDescriptorSetLayoutBinding object_index_buffer_layout_binding = {
+		.binding = 5,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding scene_bvh_buffer_layout_binding = {
+		.binding = 6,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
 	VkDescriptorSetLayoutBinding compute_descriptor_set_layout_bindings[] = {
 		rw_texture_layout_binding,
 		uniform_buffer_layout_binding,
 		triangle_buffer_layout_binding,
-		bvh_buffer_layout_binding,
-		object_buffer_layout_binding
+		mesh_bvh_buffer_layout_binding,
+		object_buffer_layout_binding,
+		object_index_buffer_layout_binding,
+		scene_bvh_buffer_layout_binding
 	};
 
 	VkDescriptorSetLayoutCreateInfo compute_descriptor_set_layout_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 5,
+		.bindingCount = 7,
 		.pBindings = compute_descriptor_set_layout_bindings
 	};
 
@@ -1090,28 +1108,56 @@ VulkanState setup_renderer(
 				sizeof(RendererState),
 				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				&vulkan_state.renderer_state_buffers[i],
-				&vulkan_state.renderer_state_buffers_memory[i]);
+				&vulkan_state.renderer_state_buffers[i].buffer,
+				&vulkan_state.renderer_state_buffers[i].memory);
 
 		vkMapMemory(
 				vulkan_state.device,
-				vulkan_state.renderer_state_buffers_memory[i],
+				vulkan_state.renderer_state_buffers[i].memory,
 				0, sizeof(RendererState),
-				0, &vulkan_state.renderer_state_buffers_mapped[i]);
+				0, &vulkan_state.renderer_state_buffers[i].mapped);
 
 		create_buffer(
 				&vulkan_state,
 				MAX_OBJECT_BUFFER_COUNT * sizeof(RenderObject),
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				&vulkan_state.object_buffers[i],
-				&vulkan_state.object_buffers_memory[i]);
+				&vulkan_state.object_buffers[i].buffer,
+				&vulkan_state.object_buffers[i].memory);
 
 		vkMapMemory(
 				vulkan_state.device,
-				vulkan_state.object_buffers_memory[i],
+				vulkan_state.object_buffers[i].memory,
 				0, MAX_OBJECT_BUFFER_COUNT * sizeof(RenderObject),
-				0, &vulkan_state.object_buffers_mapped[i]);
+				0, &vulkan_state.object_buffers[i].mapped);
+
+		create_buffer(
+				&vulkan_state,
+				MAX_OBJECT_BUFFER_COUNT * sizeof(uint32),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				&vulkan_state.object_index_buffers[i].buffer,
+				&vulkan_state.object_index_buffers[i].memory);
+
+		vkMapMemory(
+				vulkan_state.device,
+				vulkan_state.object_index_buffers[i].memory,
+				0, MAX_OBJECT_BUFFER_COUNT * sizeof(uint32),
+				0, &vulkan_state.object_index_buffers[i].mapped);
+
+		create_buffer(
+				&vulkan_state,
+				MAX_SCENE_BVH_BUFFER_COUNT * sizeof(BVHNodeFlat),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				&vulkan_state.scene_bvh_buffers[i].buffer,
+				&vulkan_state.scene_bvh_buffers[i].memory);
+
+		vkMapMemory(
+				vulkan_state.device,
+				vulkan_state.scene_bvh_buffers[i].memory,
+				0, MAX_SCENE_BVH_BUFFER_COUNT * sizeof(BVHNodeFlat),
+				0, &vulkan_state.scene_bvh_buffers[i].mapped);
 	}
 
 	create_buffer(
@@ -1119,33 +1165,33 @@ VulkanState setup_renderer(
 			sizeof(GPUTriangle) * MAX_TRIANGLE_BUFFER_COUNT,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&vulkan_state.triangle_buffer,
-			&vulkan_state.triangle_buffer_memory);
+			&vulkan_state.triangle_buffer.buffer,
+			&vulkan_state.triangle_buffer.memory);
 
 	vkMapMemory(
 			vulkan_state.device,
-			vulkan_state.triangle_buffer_memory,
+			vulkan_state.triangle_buffer.memory,
 			0, sizeof(GPUTriangle) * MAX_TRIANGLE_BUFFER_COUNT,
-			0, &vulkan_state.triangle_buffer_mapped);
+			0, &vulkan_state.triangle_buffer.mapped);
 
 	create_buffer(
 			&vulkan_state,
-			sizeof(BVHNodeFlat) * MAX_BVH_BUFFER_COUNT,
+			sizeof(BVHNodeFlat) * MAX_MESH_BVH_BUFFER_COUNT,
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&vulkan_state.bvh_buffer,
-			&vulkan_state.bvh_buffer_memory);
+			&vulkan_state.mesh_bvh_buffer.buffer,
+			&vulkan_state.mesh_bvh_buffer.memory);
 
 	vkMapMemory(
 			vulkan_state.device,
-			vulkan_state.bvh_buffer_memory,
-			0, sizeof(BVHNodeFlat) * MAX_BVH_BUFFER_COUNT,
-			0, &vulkan_state.bvh_buffer_mapped);
+			vulkan_state.mesh_bvh_buffer.memory,
+			0, sizeof(BVHNodeFlat) * MAX_MESH_BVH_BUFFER_COUNT,
+			0, &vulkan_state.mesh_bvh_buffer.mapped);
 
 	// Update descriptor sets
 	FOR(i, MAX_FRAMES_IN_FLIGHT) {
 		VkDescriptorBufferInfo uniform_buffer_info = {
-			.buffer = vulkan_state.renderer_state_buffers[i],
+			.buffer = vulkan_state.renderer_state_buffers[i].buffer,
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
@@ -1157,24 +1203,36 @@ VulkanState setup_renderer(
 		};
 
 		VkDescriptorBufferInfo triangle_buffer_info = {
-			.buffer = vulkan_state.triangle_buffer,
+			.buffer = vulkan_state.triangle_buffer.buffer,
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
 
-		VkDescriptorBufferInfo bvh_buffer_info = {
-			.buffer = vulkan_state.bvh_buffer,
+		VkDescriptorBufferInfo mesh_bvh_buffer_info = {
+			.buffer = vulkan_state.mesh_bvh_buffer.buffer,
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
 
 		VkDescriptorBufferInfo object_buffer_info = {
-			.buffer = vulkan_state.object_buffers[i],
+			.buffer = vulkan_state.object_buffers[i].buffer,
 			.offset = 0,
 			.range = VK_WHOLE_SIZE
 		};
 
-		VkWriteDescriptorSet write_descriptors[5];
+		VkDescriptorBufferInfo object_index_buffer_info = {
+			.buffer = vulkan_state.object_index_buffers[i].buffer,
+			.offset = 0,
+			.range = VK_WHOLE_SIZE
+		};
+
+		VkDescriptorBufferInfo scene_bvh_buffer_info = {
+			.buffer = vulkan_state.scene_bvh_buffers[i].buffer,
+			.offset = 0,
+			.range = VK_WHOLE_SIZE
+		};
+
+		VkWriteDescriptorSet write_descriptors[7];
 
 		write_descriptors[0] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1213,7 +1271,7 @@ VulkanState setup_renderer(
 			.dstArrayElement = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
-			.pBufferInfo = &bvh_buffer_info
+			.pBufferInfo = &mesh_bvh_buffer_info
 		};
 
 		write_descriptors[4] = (VkWriteDescriptorSet){
@@ -1226,7 +1284,27 @@ VulkanState setup_renderer(
 			.pBufferInfo = &object_buffer_info
 		};
 
-		vkUpdateDescriptorSets(vulkan_state.device, 5, write_descriptors, 0, NULL);
+		write_descriptors[5] = (VkWriteDescriptorSet){
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vulkan_state.compute_descriptor_sets[i],
+			.dstBinding = 5,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo = &object_index_buffer_info
+		};
+
+		write_descriptors[6] = (VkWriteDescriptorSet){
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vulkan_state.compute_descriptor_sets[i],
+			.dstBinding = 6,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.pBufferInfo = &scene_bvh_buffer_info
+		};
+
+		vkUpdateDescriptorSets(vulkan_state.device, 7, write_descriptors, 0, NULL);
 	}
 
 	// Pipeline

@@ -7,6 +7,7 @@ typedef struct {
 	uint32 window_height;
 	float delta_time;
 	float total_time;
+	bool mouse_locked;
 } PlatformData;
 
 typedef struct {
@@ -27,6 +28,13 @@ typedef struct {
 		 f7, f8, f9, f10, f11, f12;
 	bool nums[10];
 	bool p;
+	bool w, a, s, d;
+	bool ctrl, shift;
+	bool space;
+	// Mouse position (0, 1)
+	float mouse_x, mouse_y;
+	float mouse_delta_x, mouse_delta_y;
+	bool left_mouse, right_mouse;
 } Inputs;
 
 char* platform_read_file(char* path, uint32* out_size);

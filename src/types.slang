@@ -15,7 +15,7 @@ struct BVHNode {
 	float[3] min_bounds;
 	float[3] max_bounds;
 	uint32_t offset; // Offset for triangles for leaves, offset for right child for interior
-	uint32_t num_triangles;
+	uint32_t num_primitives;
 }
 
 struct Sphere {
@@ -64,13 +64,19 @@ struct Material {
 
 struct Object {
 	float4x4 transform;
+
 	float4x4 inv_transform;
+
 	uint32_t bvh_root_offset;
 	uint32_t triangle_offset;
+	bool is_light;
+
 	Material material;
 }
 
 struct RayDebugInfo {
 	uint tri_tests;
-	uint aabb_tests;
+	uint mesh_aabb_tests;
+	uint scene_aabb_tests;
+	uint scene_nodes;
 }

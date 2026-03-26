@@ -13,6 +13,8 @@ char* TEMP_GAME_PATH = "../build/pixel_tracer_temp.dll";
 
 Inputs INPUTS = {};
 
+bool global_mouse_locked = false;
+
 double win32_get_time_ms() {
 	LARGE_INTEGER counter;
 	QueryPerformanceCounter(&counter);
@@ -80,6 +82,13 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 				KEY_DOWN(VK_F11, f11)
 				KEY_DOWN(VK_F12, f12)
 				KEY_DOWN('P', p)
+				KEY_DOWN('W', w)
+				KEY_DOWN('A', a)
+				KEY_DOWN('S', s)
+				KEY_DOWN('D', d)
+				KEY_DOWN(VK_CONTROL, ctrl)
+				KEY_DOWN(VK_SPACE, space)
+				KEY_DOWN(VK_SHIFT, shift)
 				default: {
 					if (w_param >= '0' && w_param <= '9') {
 						INPUTS.nums[w_param - '0'] = true;
@@ -102,12 +111,53 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 				KEY_UP(VK_F11, f11)
 				KEY_UP(VK_F12, f12)
 				KEY_UP('P', p)
+				KEY_UP('W', w)
+				KEY_UP('A', a)
+				KEY_UP('S', s)
+				KEY_UP('D', d)
+				KEY_UP(VK_CONTROL, ctrl)
+				KEY_UP(VK_SPACE, space)
+				KEY_UP(VK_SHIFT, shift)
 				default: {
 					if (w_param >= '0' && w_param <= '9') {
 						INPUTS.nums[w_param - '0'] = false;
 					}
 				} break;
 			}
+		} break;
+		case WM_MOUSEMOVE: {
+			POINT cursor_pos = {};
+			GetCursorPos(&cursor_pos);
+
+			float mouse_x = (float)cursor_pos.x / WINDOW_WIDTH;
+			float mouse_y = (float)cursor_pos.y / WINDOW_HEIGHT;
+
+			INPUTS.mouse_delta_x = INPUTS.mouse_x - mouse_x;
+			INPUTS.mouse_delta_y = INPUTS.mouse_y - mouse_y;
+
+			if (global_mouse_locked) {
+				SetCursorPos(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+
+				GetCursorPos(&cursor_pos);
+
+				mouse_x = (float)cursor_pos.x / WINDOW_WIDTH;
+				mouse_y = (float)cursor_pos.y / WINDOW_HEIGHT;
+			}
+
+			INPUTS.mouse_x = mouse_x;
+			INPUTS.mouse_y = mouse_y;
+		} break;
+		case WM_LBUTTONDOWN: {
+			INPUTS.left_mouse = true;
+		} break;
+		case WM_LBUTTONUP: {
+			INPUTS.left_mouse = false;
+		} break;
+		case WM_RBUTTONDOWN: {
+			INPUTS.right_mouse = true;
+		} break;
+		case WM_RBUTTONUP: {
+			INPUTS.right_mouse = false;
 		} break;
 	}
 
@@ -224,6 +274,11 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		}
 
 		game_update_and_render(INPUTS);
+
+		if (platform_data.mouse_locked != global_mouse_locked) {
+			global_mouse_locked = platform_data.mouse_locked;
+			ShowCursor(!platform_data.mouse_locked);
+		}
 
 		frame_count++;
 	}

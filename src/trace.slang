@@ -129,14 +129,6 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 
 	float3 normal = cross(v0v1, v0v2);
 
-	// NOTE: Not part of original algo, can be removed.
-	// Normal test
-	#if 0
-	if (dot(normal, ray.direction) > 0) {
-		return false;
-	}
-	#endif
-
 	// Plane intersection
 	float d = dot(v0, normal);
 	float t = (d - dot(ray.start, normal)) / dot(ray.direction, normal);
@@ -180,6 +172,87 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 	return true;
 }
 
+bool hit_scene_bvh(
+		Ray ray,
+		out HitResult out_result,
+		IN_DEBUG(inout RayDebugInfo ray_debug_info)) {
+	float closest_t = 1.#INF;
+	HitResult closest_result = {};
+
+	bool hit_something = false;
+
+	int current_node_index = 0;
+	int[64] nodes_to_visit = {};
+	int to_visit_offset = 0;
+	while (true) {
+		BVHNode node = scene_bvh_buffer[current_node_index];
+
+#ifdef DEBUG
+		if (ray_vs_aabb_t(ray, FLOAT3(node.min_bounds), FLOAT3(node.max_bounds)) != 1.#INF) {
+			ray_debug_info.scene_nodes++;
+		}
+#endif
+
+		if (node.num_primitives > 0) { // Is leaf node, test object
+			FOR(i, node.num_primitives) {
+				Object object = object_buffer[object_index_buffer[node.offset + i]];
+
+				Ray local_ray;
+				local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
+				local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
+
+				HitResult mesh_result = {};
+				if (!hit_mesh_bvh(local_ray, object_index_buffer[node.offset + i], mesh_result, IN_DEBUG(ray_debug_info))) {
+					continue;
+				}
+
+				hit_something = true;
+
+				if (mesh_result.t < closest_t) {
+					closest_t = mesh_result.t;
+					closest_result = mesh_result;
+				}
+			}
+
+			if (to_visit_offset == 0) break;
+			current_node_index = nodes_to_visit[--to_visit_offset];
+		} else { // Isn't leaf node, add children to queue
+			int child_a_index = current_node_index + 1;
+			BVHNode child_a = scene_bvh_buffer[child_a_index];
+			float3 child_a_min = float3(child_a.min_bounds[0], child_a.min_bounds[1], child_a.min_bounds[2]);
+			float3 child_a_max = float3(child_a.max_bounds[0], child_a.max_bounds[1], child_a.max_bounds[2]);
+			float distance_a = ray_vs_aabb_t(ray, child_a_min, child_a_max);
+
+			int child_b_index = node.offset;
+			BVHNode child_b = scene_bvh_buffer[child_b_index];
+			float3 child_b_min = float3(child_b.min_bounds[0], child_b.min_bounds[1], child_b.min_bounds[2]);
+			float3 child_b_max = float3(child_b.max_bounds[0], child_b.max_bounds[1], child_b.max_bounds[2]);
+			float distance_b = ray_vs_aabb_t(ray, child_b_min, child_b_max);
+
+			IN_DEBUG(ray_debug_info.scene_aabb_tests += 2);
+
+			if (distance_a > distance_b) {
+				nodes_to_visit[to_visit_offset++] = child_a_index;
+				nodes_to_visit[to_visit_offset++] = child_b_index;
+			} else {
+				nodes_to_visit[to_visit_offset++] = child_b_index;
+				nodes_to_visit[to_visit_offset++] = child_a_index;
+			}
+
+			if (to_visit_offset == 0) break;
+			current_node_index = nodes_to_visit[--to_visit_offset];
+		}
+	}
+
+	if (hit_something) {
+		out_result = closest_result;
+		return true;
+	}
+
+	out_result = {};
+	return false;
+}
+
 bool hit_mesh_bvh(
 		Ray ray,
 		uint object_index,
@@ -196,9 +269,10 @@ bool hit_mesh_bvh(
 	int[64] nodes_to_visit = {};
 	int to_visit_offset = 0;
 	while (true) {
-		BVHNode node = bvh_buffer[current_node_index + bvh_offset];
-		if (node.num_triangles > 0) { // Is leaf node, test triangles
-			for (int i = 0; i < node.num_triangles; i++) {
+		BVHNode node = mesh_bvh_buffer[current_node_index + bvh_offset];
+
+		if (node.num_primitives > 0) { // Is leaf node, test triangles
+			for (int i = 0; i < node.num_primitives; i++) {
 				IN_DEBUG(ray_debug_info.tri_tests++);
 
 				HitInfo hit_info = {};
@@ -216,18 +290,18 @@ bool hit_mesh_bvh(
 			current_node_index = nodes_to_visit[--to_visit_offset];
 		} else { // Isn't leaf node, add children to queue
 			int child_a_index = current_node_index + 1;
-			BVHNode child_a = bvh_buffer[child_a_index + bvh_offset];
+			BVHNode child_a = mesh_bvh_buffer[child_a_index + bvh_offset];
 			float3 child_a_min = float3(child_a.min_bounds[0], child_a.min_bounds[1], child_a.min_bounds[2]);
 			float3 child_a_max = float3(child_a.max_bounds[0], child_a.max_bounds[1], child_a.max_bounds[2]);
 			float distance_a = ray_vs_aabb_t(ray, child_a_min, child_a_max);
 
 			int child_b_index = node.offset;
-			BVHNode child_b = bvh_buffer[child_b_index + bvh_offset];
+			BVHNode child_b = mesh_bvh_buffer[child_b_index + bvh_offset];
 			float3 child_b_min = float3(child_b.min_bounds[0], child_b.min_bounds[1], child_b.min_bounds[2]);
 			float3 child_b_max = float3(child_b.max_bounds[0], child_b.max_bounds[1], child_b.max_bounds[2]);
 			float distance_b = ray_vs_aabb_t(ray, child_b_min, child_b_max);
 
-			IN_DEBUG(ray_debug_info.aabb_tests += 2);
+			IN_DEBUG(ray_debug_info.mesh_aabb_tests += 2);
 
 			if (distance_a > distance_b) {
 				if (distance_a < closest_t) nodes_to_visit[to_visit_offset++] = child_a_index;

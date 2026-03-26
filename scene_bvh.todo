@@ -1,0 +1,27 @@
+## Scene BVH
+
+Only necessary information is really:
+	1. order of objects,
+	2. meshes (has to know what object it corresponds to),
+	3. transforms (same as above).
+
+ - Mesh + RenderObject doesn't know what mesh corresponds to what object.
+ - Mesh + Object doesn't know order of render objects (important).
+ - SceneBVHObject (mesh + transform) could work but requires additional set up (could be done in build function?).
+
+
+## SceneBVHObject method
+
+`build_scene_bvh` gets RenderObject + Mesh sent by `draw_frame`.
+Builds `SceneBVHObject`s.
+
+How to know what mesh is what object?
+	Objects and Meshes don't know their transform.
+	RenderObject and Meshes aren't connected to each other.
+	Create SceneBVHObjects in draw_frame for now.
+
+Downside is one more step of things to allocate, would be nicer to just get existing things.
+
+## Todo
+Maybe return a `BVHTree` instead of keeping track of size and root node separately?
+Could at least be worth trying out.

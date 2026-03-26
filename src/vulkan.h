@@ -1,7 +1,8 @@
 enum { MAX_FRAMES_IN_FLIGHT = 2 };
 enum { MAX_TRIANGLE_BUFFER_COUNT = 4096 };
-enum { MAX_BVH_BUFFER_COUNT = 4096 };
+enum { MAX_MESH_BVH_BUFFER_COUNT = 4096 };
 enum { MAX_OBJECT_BUFFER_COUNT = 64 };
+enum { MAX_SCENE_BVH_BUFFER_COUNT = 128 };
 
 typedef struct {
 	Vec3 color;
@@ -10,12 +11,22 @@ typedef struct {
 
 typedef struct {
 	Mat4 transform;
+
 	Mat4 inv_transform;
+
 	uint32 bvh_root_offset;
 	uint32 triangle_offset;
-	int32 pad_0[2];
+	bool32 is_light;
+	int32 pad_0[1];
+
 	Material material;
 } RenderObject;
+
+typedef struct {
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+	void* mapped;
+} VulkanBuffer;
 
 typedef struct {
 	bool is_initialized;
@@ -36,18 +47,12 @@ typedef struct {
 	VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
 	VkCommandBuffer compute_command_buffers[MAX_FRAMES_IN_FLIGHT];
 
-	VkBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
-	VkDeviceMemory renderer_state_buffers_memory[MAX_FRAMES_IN_FLIGHT];
-	void* renderer_state_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
-	VkBuffer object_buffers[MAX_FRAMES_IN_FLIGHT];
-	VkDeviceMemory object_buffers_memory[MAX_FRAMES_IN_FLIGHT];
-	void* object_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
-	VkBuffer triangle_buffer;
-	VkDeviceMemory triangle_buffer_memory;
-	void* triangle_buffer_mapped;
-	VkBuffer bvh_buffer;
-	VkDeviceMemory bvh_buffer_memory;
-	void* bvh_buffer_mapped;
+	VulkanBuffer renderer_state_buffers[MAX_FRAMES_IN_FLIGHT];
+	VulkanBuffer object_buffers[MAX_FRAMES_IN_FLIGHT];
+	VulkanBuffer object_index_buffers[MAX_FRAMES_IN_FLIGHT];
+	VulkanBuffer scene_bvh_buffers[MAX_FRAMES_IN_FLIGHT];
+	VulkanBuffer triangle_buffer;
+	VulkanBuffer mesh_bvh_buffer;
 
 	VkDescriptorSet descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 	VkDescriptorSet compute_descriptor_sets[MAX_FRAMES_IN_FLIGHT];

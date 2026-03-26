@@ -19,7 +19,15 @@ typedef struct {
 typedef struct {
 	uint32 root_node_offset;
 	uint32 triangle_offset;
+	Vec3 centroid;
+	Vec3 min_bounds;
+	Vec3 max_bounds;
 } Mesh;
+
+typedef struct {
+	Mesh* mesh;
+	Mat4 inv_transform;
+} SceneBVHObject;
 
 enum { NAME_LEN = 64 };
 

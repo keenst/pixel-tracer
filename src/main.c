@@ -32,7 +32,7 @@ Object* register_object(const char* name) {
 	object->scene_id = global->current_scene_id;
 	object->material = (Material){
 		.color = vec3(1, 1, 1),
-		.roughness = 0.5f
+			.roughness = 0.5f
 	};
 
 	return object;
@@ -56,6 +56,9 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	/*      SEND OBJECTS TO GPU       */
 	/*================================*/
 
+	SceneBVHObject* scene_bvh_objects = alloc(global->num_objects * sizeof(SceneBVHObject));
+
+	// Create `RenderObject`s
 	RenderObject* render_objects = alloc(global->num_objects * sizeof(RenderObject));
 
 	global->renderer_state.num_objects = global->num_objects;
@@ -111,11 +114,24 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 		if (color.r > 1 + 1e-5 || color.g > 1 + 1e-5 || color.b > 1 + 1e-5)
 		{
 			render_object = &render_objects[light_index];
+			render_object->is_light = true;
+
+			scene_bvh_objects[light_index] = (SceneBVHObject){
+				.mesh = &global->meshes[object->mesh_id],
+				.inv_transform = transform
+			};
+
 			light_index++;
 		}
 		else
 		{
 			render_object = &render_objects[global->num_objects - non_light_index - 1];
+
+			scene_bvh_objects[global->num_objects - non_light_index - 1] = (SceneBVHObject){
+				.mesh = &global->meshes[object->mesh_id],
+				.inv_transform = transform
+			};
+
 			non_light_index++;
 		}
 
@@ -131,15 +147,30 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	global->renderer_state.num_lights = light_index;
 
 	memcpy(
-			global->vulkan_state.object_buffers_mapped[global->current_frame],
+			global->vulkan_state.object_buffers[global->current_frame].mapped,
 			render_objects,
 			global->num_objects * sizeof(RenderObject));
+
+	// Build scene BVH tree
+	uint* object_indices;
+	BVHNodeFlat* scene_bvh_nodes;
+	uint32 num_nodes = build_scene_bvh(scene_bvh_objects, global->num_objects, &object_indices, &scene_bvh_nodes);
+
+	memcpy(
+			global->vulkan_state.object_index_buffers[global->current_frame].mapped,
+			object_indices,
+			global->num_objects * sizeof(uint));
+
+	memcpy(
+			global->vulkan_state.scene_bvh_buffers[global->current_frame].mapped,
+			scene_bvh_nodes,
+			num_nodes * sizeof(BVHNodeFlat));
 
 	/*======================================*/
 	/*               COMPUTE 				*/
 	/*======================================*/
 
-	memcpy(vulkan_state->renderer_state_buffers_mapped[current_frame], &global->renderer_state, sizeof(RendererState));
+	memcpy(vulkan_state->renderer_state_buffers[current_frame].mapped, &global->renderer_state, sizeof(RendererState));
 
 	VK_ASSERT(vkWaitForFences(vulkan_state->device, 1, &vulkan_state->compute_in_flight_fences[current_frame], VK_TRUE, UINT64_MAX));
 	VK_ASSERT(vkResetFences(vulkan_state->device, 1, &vulkan_state->compute_in_flight_fences[current_frame]));
@@ -170,11 +201,11 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	VK_ASSERT(vkEndCommandBuffer(vulkan_state->compute_command_buffers[current_frame]));
 
 	transition_image_layout(
-		vulkan_state,
-		vulkan_state->render_texture_image,
-		vulkan_state->surface_format.format,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_IMAGE_LAYOUT_GENERAL);
+			vulkan_state,
+			vulkan_state->render_texture_image,
+			vulkan_state->surface_format.format,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_LAYOUT_GENERAL);
 
 	VkSemaphore compute_signal_semaphores[] = {
 		vulkan_state->compute_finished_semaphores[current_frame]
@@ -189,9 +220,9 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 	};
 
 	VK_ASSERT(vkQueueSubmit(
-			vulkan_state->graphics_queue,
-			1, &compute_submit_info,
-			vulkan_state->compute_in_flight_fences[current_frame]));
+				vulkan_state->graphics_queue,
+				1, &compute_submit_info,
+				vulkan_state->compute_in_flight_fences[current_frame]));
 
 	/*======================================*/
 	/*               GRAPHICS 				*/
@@ -320,72 +351,147 @@ void load_trace_shader(char* path) {
 	};
 
 	VK_ASSERT(vkCreateComputePipelines(
-			vulkan_state->device,
-			VK_NULL_HANDLE,
-			1, &compute_pipeline_create_info,
-			NULL,
-			&vulkan_state->compute_pipeline));
+				vulkan_state->device,
+				VK_NULL_HANDLE,
+				1, &compute_pipeline_create_info,
+				NULL,
+				&vulkan_state->compute_pipeline));
 
 	printf("Rebuilt compute pipeline\n");
 }
 
 __declspec(dllexport)
-void game_update_and_render(Inputs inputs) {
-	// Check for changes to compute shader
-	char* shader_path = SHADER_PATHS[global->current_render_mode];
-	uint64 compute_shader_modified_time = platform_get_file_modified_time(shader_path);
-	if (compute_shader_modified_time > global->prev_compute_shader_modified_time) {
-		global->prev_compute_shader_modified_time = compute_shader_modified_time;
-		load_trace_shader(shader_path);
-	}
-
-	// Input
-	if (inputs.f1 && !global->prev_inputs.f1) {
-		if (global->current_render_mode != RM_NORMAL) {
-			global->current_render_mode = RM_NORMAL;
-			load_trace_shader(SHADER_PATHS[global->current_render_mode]);
+	void game_update_and_render(Inputs inputs) {
+		// Check for changes to compute shader
+		char* shader_path = SHADER_PATHS[global->current_render_mode];
+		uint64 compute_shader_modified_time = platform_get_file_modified_time(shader_path);
+		if (compute_shader_modified_time > global->prev_compute_shader_modified_time) {
+			global->prev_compute_shader_modified_time = compute_shader_modified_time;
+			load_trace_shader(shader_path);
 		}
-	}
 
-	if (inputs.f2 && !global->prev_inputs.f2) {
-		if (global->current_render_mode != RM_DEBUG) {
-			global->current_render_mode = RM_DEBUG;
-			load_trace_shader(SHADER_PATHS[global->current_render_mode]);
+		// Input
+		if (inputs.f1 && !global->prev_inputs.f1) {
+			if (global->current_render_mode != RM_NORMAL) {
+				global->current_render_mode = RM_NORMAL;
+				load_trace_shader(SHADER_PATHS[global->current_render_mode]);
+			}
 		}
+
+		if (inputs.f2 && !global->prev_inputs.f2) {
+			if (global->current_render_mode != RM_DEBUG) {
+				global->current_render_mode = RM_DEBUG;
+				load_trace_shader(SHADER_PATHS[global->current_render_mode]);
+			}
+		}
+
+		FOR(i, 10) {
+			if (!inputs.nums[i] || global->prev_inputs.nums[i]) continue;
+			global->current_scene_id = i;
+		}
+
+		if (inputs.p && !global->prev_inputs.p) {
+			global->renderer_state.progressive ^= true;
+			global->renderer_state.num_frames = 1;
+		}
+
+		// Update
+		float total_time = global->platform_data->total_time;
+		float delta_time = global->platform_data->delta_time;
+
+		// Movement
+		static float yaw = 0;
+		static float pitch = 0;
+
+		if (inputs.right_mouse) {
+			const float mouse_sensitivity = 80.0f;
+			yaw += inputs.mouse_delta_x * delta_time * mouse_sensitivity;
+			pitch += inputs.mouse_delta_y * delta_time * mouse_sensitivity;
+			global->platform_data->mouse_locked = true;
+		} else {
+			global->platform_data->mouse_locked = false;
+		}
+
+		static Vec3 position = { 0, 0, 5 };
+
+		Vec3 move_direction = {};
+
+		if (inputs.w) {
+			move_direction.z += 1;
+		}
+
+		if (inputs.s) {
+			move_direction.z -= 1;
+		}
+
+		if (inputs.a) {
+			move_direction.x -= 1;
+		}
+
+		if (inputs.d) {
+			move_direction.x += 1;
+		}
+
+		if (inputs.space) {
+			move_direction.y += 1;
+		}
+
+		if (inputs.ctrl) {
+			move_direction.y -= 1;
+		}
+
+		move_direction = vec3_normalized(move_direction);
+
+		float camera_speed = 2.0f;
+		if (inputs.shift) {
+			camera_speed = 4.0f;
+		}
+
+		Mat4 y_rot = mat4_rot_y(yaw);
+		Mat4 x_rot = mat4_rot_x(pitch);
+		Mat4 rotation = mat4_mul(y_rot, x_rot);
+
+		global->renderer_state.camera_transform = rotation;
+
+		Vec3 camera_forward = vec3(
+				global->renderer_state.camera_transform.arr[0][2],
+				global->renderer_state.camera_transform.arr[1][2],
+				global->renderer_state.camera_transform.arr[2][2]);
+
+		Vec3 up = vec3(0, 1, 0);
+		Vec3 right = vec3_cross(up, camera_forward);
+		Vec3 forward = vec3_cross(up, right); 
+
+		move_direction = vec3_add(
+				vec3(0, move_direction.y, 0),
+				vec3_add(
+					vec3_scale(right, move_direction.x),
+					vec3_scale(forward, move_direction.z)));
+
+		position = vec3_add(position, vec3_scale(move_direction, camera_speed * delta_time));
+		global->renderer_state.camera_transform.arr[0][3] = position.x;
+		global->renderer_state.camera_transform.arr[1][3] = position.y;
+		global->renderer_state.camera_transform.arr[2][3] = position.z;
+
+		Object* lit_monkey = get_object("lit_monkey");
+		lit_monkey->position.y = sinf(total_time);
+		lit_monkey->orientation.y += delta_time;
+
+		// Draw
+		global->renderer_state.time = global->platform_data->total_time;
+		draw_frame(&global->vulkan_state, global->current_frame, global->renderer_state);
+		global->current_frame = (global->current_frame + 1) % 2;
+
+		global->prev_inputs = inputs;
+
+		clear_arena(&global->frame_arena);
 	}
-
-	FOR(i, 10) {
-		if (!inputs.nums[i] || global->prev_inputs.nums[i]) continue;
-		global->current_scene_id = i;
-	}
-
-	if (inputs.p && !global->prev_inputs.p) {
-		global->renderer_state.progressive ^= true;
-		global->renderer_state.num_frames = 1;
-	}
- 
-	// Update
-	float total_time = global->platform_data->total_time;
-	float delta_time = global->platform_data->delta_time;
-
-	Object* suz = get_object("suz");
-	suz->position.y = sinf(total_time);
-	suz->orientation.y += delta_time;
-
-	// Draw
-	global->renderer_state.time = global->platform_data->total_time;
-	draw_frame(&global->vulkan_state, global->current_frame, global->renderer_state);
-	global->current_frame = (global->current_frame + 1) % 2;
-
-	global->prev_inputs = inputs;
-
-	clear_arena(&global->frame_arena);
-}
 
 void game_start() {
 	// Cornell box
 	global->current_scene_id = 1;
 
+	/*
 	Object* suz = register_object("suz");
 	suz->mesh_id = get_mesh_id("suzanne.obj");
 	suz->material.color = vec3(0, 1, 0);
@@ -429,6 +535,7 @@ void game_start() {
 		.color = vec3(2, 2, 2)
 	};
 	light->scale = vec3(1, 1, 1);
+	*/
 
 	// Monkey
 	global->current_scene_id = 0;
@@ -473,11 +580,10 @@ void game_start() {
 
 __declspec(dllexport)
 void game_init(
-	PlatformData* platform_data,
-	VulkanPlatformData vulkan_platform_data,
-	void* memory,
-	uint memory_size)
-{
+		PlatformData* platform_data,
+		VulkanPlatformData vulkan_platform_data,
+		void* memory,
+		uint memory_size) {
 	global = memory;
 	global->base_arena = (Arena){
 		.base = memory,
@@ -531,9 +637,37 @@ void game_init(
 		uint32 num_triangles = parse_obj(file_contents, &triangles);
 		printf("- Triangles: %i\n", num_triangles);
 
+		// Generate centroid and bounds
+		float min_x = FLT_MAX;
+		float min_y = FLT_MAX;
+		float min_z = FLT_MAX;
+		float max_x = -FLT_MAX;
+		float max_y = -FLT_MAX;
+		float max_z = -FLT_MAX;
+
+		Vec3 centroid = {};
+
+		FOR(tri_index, num_triangles) {
+			Triangle triangle = triangles[tri_index];
+			FOR(vert_index, 3) {
+				Vertex vertex = triangle.vertices[vert_index];
+
+				if (vertex.position.x < min_x) min_x = vertex.position.x;
+				if (vertex.position.x > max_x) max_x = vertex.position.x;
+				if (vertex.position.y < min_y) min_y = vertex.position.y;
+				if (vertex.position.y > max_y) max_y = vertex.position.y;
+				if (vertex.position.z < min_z) min_z = vertex.position.z;
+				if (vertex.position.z > max_z) max_z = vertex.position.z;
+			}
+		}
+
+		mesh.min_bounds = vec3(min_x, min_y, min_z);
+		mesh.max_bounds = vec3(max_x, max_y, max_z);
+		mesh.centroid = vec3_scale(vec3_add(mesh.min_bounds, mesh.max_bounds), 0.5f);
+
 		// Build BVH and reorder triangles
 		BVHNodeFlat* bvh_nodes;
-		uint32 num_bvh_nodes = build_bvh(triangles, num_triangles, &bvh_nodes);
+		uint32 num_bvh_nodes = build_mesh_bvh(triangles, num_triangles, &bvh_nodes);
 
 		printf("- BVH nodes: %i\n", num_bvh_nodes);
 
@@ -551,9 +685,9 @@ void game_init(
 
 	printf("Finished loading assets. Took %.2fms.\n\n", platform_get_time_ms() - loading_assets_start_time);
 
-	/*===============================*/
-	/*      SETUP GAME INSTANCE      */
-	/*===============================*/
+	/*================================*/
+	/*      SET UP GAME INSTANCE      */
+	/*================================*/
 
 	if (!global->vulkan_state.is_initialized) {
 		global->vulkan_state = setup_renderer(vulkan_platform_data, platform_data->window_width, platform_data->window_height);
@@ -577,9 +711,9 @@ void game_init(
 
 		global->renderer_state = (RendererState){
 			.sample_count = 16,
-			.pixel_delta_u = pixel_delta_u,
-			.pixel_delta_v = pixel_delta_v,
-			.first_pixel_location = first_pixel_location
+				.pixel_delta_u = pixel_delta_u,
+				.pixel_delta_v = pixel_delta_v,
+				.first_pixel_location = first_pixel_location
 		};
 
 		// Set up camera
@@ -602,7 +736,7 @@ void game_init(
 	/*===============================*/
 
 	memcpy(
-			(BVHNodeFlat*)global->vulkan_state.bvh_buffer_mapped,
+			(BVHNodeFlat*)global->vulkan_state.mesh_bvh_buffer.mapped,
 			global->bvh_buffer,
 			global->bvh_buffer_size * sizeof(BVHNodeFlat));
 
@@ -624,7 +758,7 @@ void game_init(
 		}
 
 		memcpy(
-				(GPUTriangle*)global->vulkan_state.triangle_buffer_mapped + i,
+				(GPUTriangle*)global->vulkan_state.triangle_buffer.mapped + i,
 				&gpu_triangle,
 				sizeof(GPUTriangle));
 	}

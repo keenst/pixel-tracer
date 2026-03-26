@@ -7,8 +7,10 @@
 uniform RWTexture2D<float4> render_texture;
 uniform RendererState renderer_state;
 uniform StructuredBuffer<Tri> triangle_buffer;
-uniform StructuredBuffer<BVHNode> bvh_buffer;
+uniform StructuredBuffer<BVHNode> mesh_bvh_buffer;
 uniform StructuredBuffer<Object> object_buffer;
+uniform StructuredBuffer<uint32_t> object_index_buffer;
+uniform StructuredBuffer<BVHNode> scene_bvh_buffer;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -22,12 +24,18 @@ void main(int3 coords : SV_DispatchThreadID) {
 	Ray ray = {};
 	ray.direction = normalize(pixel_center);
 
+	ray.start = mul(float4(ray.start, 1), state.camera_transform).xyz;
+	ray.direction = mul(float4(ray.direction, 0), state.camera_transform).xyz;
+
 	RayDebugInfo ray_debug_info = {};
 
 	bool hit_something = false;
 	HitResult closest_hit = {};
 	closest_hit.t = 1.#INF;
 
+	hit_something = hit_scene_bvh(ray, closest_hit, ray_debug_info);
+
+#if 0
 	FOR(object_index, state.num_objects) {
 		Object object = object_buffer[object_index];
 
@@ -43,14 +51,20 @@ void main(int3 coords : SV_DispatchThreadID) {
 		closest_hit = hit;
 		hit_something = true;
 	}
+#endif
 
 	// Compute color
-	const int threshold = 64;
+	const int mesh_threshold = 64;
+	const int scene_threshold = 8;
 	float3 sample_color = float3(0);
-	if (ray_debug_info.aabb_tests > threshold) {
-		sample_color = float3(1, 0, 0);
+	if (	ray_debug_info.scene_nodes > scene_threshold ||
+			ray_debug_info.mesh_aabb_tests > mesh_threshold) {
+		sample_color = float3(1, 1, 1);
 	} else {
-		sample_color = float3(1, 1, 1) * ray_debug_info.aabb_tests / threshold;
+		sample_color = float3(
+				(float)ray_debug_info.scene_nodes / scene_threshold,
+				0,
+				(float)ray_debug_info.mesh_aabb_tests / mesh_threshold);
 	}
 
 	render_texture[coords.xy] = float4(sample_color, 1);

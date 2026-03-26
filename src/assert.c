@@ -167,5 +167,5 @@ char* stringify_vulkan_result(VkResult res) {
 		} \
 	}
 #else
-#define VK_CHECK(function) function;
+#define VK_ASSERT(function) function;
 #endif
