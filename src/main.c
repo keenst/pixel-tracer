@@ -118,7 +118,7 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 			scene_bvh_objects[light_index] = (SceneBVHObject){
 				.mesh = &global->meshes[object->mesh_id],
-				.inv_transform = transform
+				.transform = transform
 			};
 
 			light_index++;
@@ -129,7 +129,7 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 			scene_bvh_objects[global->num_objects - non_light_index - 1] = (SceneBVHObject){
 				.mesh = &global->meshes[object->mesh_id],
-				.inv_transform = transform
+				.transform = transform
 			};
 
 			non_light_index++;

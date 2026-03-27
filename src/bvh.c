@@ -28,7 +28,7 @@ void update_mesh_bvh_bounds(Triangle* triangles, BVHNode* node) {
 	node->max_bounds = vec3(max_x, max_y, max_z);
 }
 
-void update_scene_bvh_bounds(SceneBVHObject* objects, BVHNode* node) {
+void update_scene_bvh_bounds(SceneBVHObject* objects, uint* object_indices, BVHNode* node) {
 	float min_x = FLT_MAX;
 	float min_y = FLT_MAX;
 	float min_z = FLT_MAX;
@@ -37,7 +37,7 @@ void update_scene_bvh_bounds(SceneBVHObject* objects, BVHNode* node) {
 	float max_z = -FLT_MAX;
 
 	FOR_RANGE(object_index, node->first_primitive, node->first_primitive + node->num_primitives - 1) {
-		SceneBVHObject object = objects[object_index];
+		SceneBVHObject object = objects[object_indices[object_index]];
 
 		Vec3 corners[8];
 		Vec3 bounds[2] = { object.mesh->min_bounds, object.mesh->max_bounds };
@@ -51,8 +51,8 @@ void update_scene_bvh_bounds(SceneBVHObject* objects, BVHNode* node) {
 		}
 	
 		FOR(corner_index, 8) {
-			Vec4 min_bounds = vec4_mul_mat4(vec3_xyz1(corners[corner_index]), object.inv_transform);
-			Vec4 max_bounds = vec4_mul_mat4(vec3_xyz1(corners[corner_index]), object.inv_transform);
+			Vec4 min_bounds = vec4_mul_mat4(vec3_xyz1(corners[corner_index]), object.transform);
+			Vec4 max_bounds = vec4_mul_mat4(vec3_xyz1(corners[corner_index]), object.transform);
 
 			if (min_bounds.x < min_x) min_x = min_bounds.x;
 			if (min_bounds.x > max_x) max_x = min_bounds.x;
@@ -154,7 +154,8 @@ void subdivide_scene_bvh(SceneBVHObject* objects, uint* object_indices, BVHNode*
 	float split_pos = 0;
 	FOR(i, node->num_primitives) {
 		SceneBVHObject object = objects[object_indices[node->first_primitive + i]];
-		split_pos += object.mesh->centroid.arr[axis];
+		Vec4 world_centroid = vec4_mul_mat4(vec3_xyz1(object.mesh->centroid), object.transform);
+		split_pos += world_centroid.arr[axis];
 	}
 	split_pos /= node->num_primitives;
 
@@ -163,7 +164,7 @@ void subdivide_scene_bvh(SceneBVHObject* objects, uint* object_indices, BVHNode*
 	int j = i + node->num_primitives - 1;
 	while (i <= j) {
 		SceneBVHObject object = objects[object_indices[i]];
-		Vec4 world_centroid = vec4_mul_mat4(vec3_xyz1(object.mesh->centroid), object.inv_transform);
+		Vec4 world_centroid = vec4_mul_mat4(vec3_xyz1(object.mesh->centroid), object.transform);
 
 		if (world_centroid.arr[axis] < split_pos) {
 			i++;
@@ -188,7 +189,7 @@ void subdivide_scene_bvh(SceneBVHObject* objects, uint* object_indices, BVHNode*
 		.first_primitive = node->first_primitive,
 		.num_primitives = num_left
 	};
-	update_scene_bvh_bounds(objects, node->left);
+	update_scene_bvh_bounds(objects, object_indices, node->left);
 	(*num_nodes)++;
 
 	if (!node->left->is_leaf) {
@@ -201,7 +202,7 @@ void subdivide_scene_bvh(SceneBVHObject* objects, uint* object_indices, BVHNode*
 		.first_primitive = i,
 		.num_primitives = node->num_primitives - num_left
 	};
-	update_scene_bvh_bounds(objects, node->right);
+	update_scene_bvh_bounds(objects, object_indices, node->right);
 	(*num_nodes)++;
 
 	if (!node->right->is_leaf) {
@@ -271,18 +272,18 @@ uint32 build_scene_bvh(
 		uint num_objects,
 		uint** out_object_indices,
 		BVHNodeFlat** out_bvh_nodes) {
-	// Create root node
-	BVHNode* root = alloc(sizeof(BVHNode));
-	root->first_primitive = 0;
-	root->num_primitives = num_objects;
-	root->is_leaf = false;
-	update_scene_bvh_bounds(objects, root);
-
 	// Generate indices
 	*out_object_indices = alloc(num_objects * sizeof(uint));
 	FOR(i, num_objects) {
 		(*out_object_indices)[i] = i;
 	}
+
+	// Create root node
+	BVHNode* root = alloc(sizeof(BVHNode));
+	root->first_primitive = 0;
+	root->num_primitives = num_objects;
+	root->is_leaf = false;
+	update_scene_bvh_bounds(objects, *out_object_indices, root);
 
 	// Subdivide recursively
 	uint32 num_nodes = 1;

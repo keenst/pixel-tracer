@@ -201,6 +201,8 @@ bool hit_scene_bvh(
 				local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
 				local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
 
+				float incoming_length = length(local_ray.direction);
+
 				HitResult mesh_result = {};
 				if (!hit_mesh_bvh(local_ray, object_index_buffer[node.offset + i], mesh_result, IN_DEBUG(ray_debug_info))) {
 					continue;
@@ -208,6 +210,9 @@ bool hit_scene_bvh(
 
 				hit_something = true;
 
+				// TODO: I think there could be something happening with t not being adjusted
+				// for scaled spaces. Poke around with this
+				//mesh_result.t /= incoming_length;
 				if (mesh_result.t < closest_t) {
 					closest_t = mesh_result.t;
 					closest_result = mesh_result;
@@ -231,6 +236,7 @@ bool hit_scene_bvh(
 
 			IN_DEBUG(ray_debug_info.scene_aabb_tests += 2);
 
+#if 0
 			if (distance_a > distance_b) {
 				nodes_to_visit[to_visit_offset++] = child_a_index;
 				nodes_to_visit[to_visit_offset++] = child_b_index;
@@ -238,6 +244,15 @@ bool hit_scene_bvh(
 				nodes_to_visit[to_visit_offset++] = child_b_index;
 				nodes_to_visit[to_visit_offset++] = child_a_index;
 			}
+#else
+			if (distance_a > distance_b) {
+				if (distance_a < closest_t) nodes_to_visit[to_visit_offset++] = child_a_index;
+				if (distance_b < closest_t) nodes_to_visit[to_visit_offset++] = child_b_index;
+			} else {
+				if (distance_b < closest_t) nodes_to_visit[to_visit_offset++] = child_b_index;
+				if (distance_a < closest_t) nodes_to_visit[to_visit_offset++] = child_a_index;
+			}
+#endif
 
 			if (to_visit_offset == 0) break;
 			current_node_index = nodes_to_visit[--to_visit_offset];

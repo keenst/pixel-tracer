@@ -26,7 +26,7 @@ typedef struct {
 
 typedef struct {
 	Mesh* mesh;
-	Mat4 inv_transform;
+	Mat4 transform;
 } SceneBVHObject;
 
 enum { NAME_LEN = 64 };
