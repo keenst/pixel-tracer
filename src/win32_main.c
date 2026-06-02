@@ -1,7 +1,7 @@
 HMODULE GAME_DLL;
 
-uint32 WINDOW_WIDTH = 1600;
-uint32 WINDOW_HEIGHT = 900;
+uint32 WINDOW_WIDTH = 1920;
+uint32 WINDOW_HEIGHT = 1080;
 
 typedef void (*GAME_UPDATE_AND_RENDER)(Inputs inputs);
 GAME_UPDATE_AND_RENDER game_update_and_render;
@@ -136,7 +136,15 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 			INPUTS.mouse_delta_y = INPUTS.mouse_y - mouse_y;
 
 			if (global_mouse_locked) {
-				SetCursorPos(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+				RECT window_rect;
+				GetWindowRect(GetActiveWindow(), &window_rect);
+
+				int x = window_rect.left;
+				int y = window_rect.top;
+				int width = window_rect.right - window_rect.left;
+				int height = window_rect.bottom - window_rect.top;
+
+				SetCursorPos(width / 2 + x, height / 2 + y);
 
 				GetCursorPos(&cursor_pos);
 
@@ -212,8 +220,7 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 	PlatformData platform_data = {
 		.window_width = WINDOW_WIDTH,
 		.window_height = WINDOW_HEIGHT,
-		.delta_time = 0,
-		.total_time = 0
+		.delta_time = 0
 	};
 
 	uint game_memory_size = 1024 * 1024 * 1024;
@@ -236,7 +243,6 @@ int WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmd_line, int cmd
 		last_update_time = time_now;
 
 		platform_data.delta_time = frame_time / 1000;
-		platform_data.total_time += frame_time / 1000;
 
 		perf_update_timer += frame_time;
 		if (perf_update_timer >= perf_update_interval) {

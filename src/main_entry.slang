@@ -15,6 +15,7 @@ uniform StructuredBuffer<BVHNode> scene_bvh_buffer;
 void main(int3 coords : SV_DispatchThreadID) {
 	RendererState state = renderer_state;
 
+	global_random_seed = float2(coords.x, coords.y) * state.time;
 	random_counter = coords.x * coords.y * state.time;
 
 	const int max_depth = 4;
@@ -35,44 +36,28 @@ void main(int3 coords : SV_DispatchThreadID) {
 		int depth = 0;
 		while (true) {
 			if (depth >= max_depth) {
-				path_colors[depth] = float3(0);
+				path_colors[depth - 1] = float3(0);
 				break;
 			}
 
 			bool hit_something = false;
-			HitResult closest_hit = {};
-			closest_hit.t = 1.#INF;
+			HitResult hit = {};
+			hit.t = 1.#INF;
 
-			hit_something = hit_scene_bvh(ray, closest_hit);
-
-#if 0
-			FOR(object_index, state.num_objects) {
-				Object object = object_buffer[object_index_buffer[object_index]];
-
-				Ray local_ray;
-				local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
-				local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
-
-				HitResult hit;
-				if (!hit_mesh_bvh(local_ray, object_index_buffer[object_index], hit)) continue;
-
-				if (hit.t > closest_hit.t) continue;
-
-				closest_hit = hit;
-				hit_something = true;
-			}
-#endif
+			hit_something = hit_scene_bvh(ray, hit);
 
 			if (hit_something) {
-				Object object = object_buffer[closest_hit.object_index];
+				Object object = object_buffer[hit.object_index];
 
 				if (object.is_light) {
-					path_colors[depth] = object.material.color;
+					path_colors[depth] = hit.color;
 					break;
 				} else {
-					ray.start = mul(float4(closest_hit.ray.start, 1), object.transform).xyz;
-					ray.direction = mul(float4(closest_hit.ray.direction, 0), object.transform).xyz;
-					path_colors[depth] = object.material.color;
+					ray.start = mul(float4(hit.ray.start, 1), object.transform).xyz;
+					ray.direction = mul(float4(hit.ray.direction, 0), mul(object.transform, transpose(object.inv_transform))).xyz;
+
+					path_colors[depth] = hit.color;
+
 					depth++;
 				}
 			} else {
@@ -92,6 +77,13 @@ void main(int3 coords : SV_DispatchThreadID) {
 
 	if (state.progressive) {
 		float4 tex_color = render_texture[coords.xy];
+
+		/*
+		float4 current_color = tex_color * ((float)state.num_frames / (state.num_frames + 1));
+		current_color += float4(color, 1) * (1.0f / (state.num_frames + 1));
+
+		render_texture[coords.xy] = current_color;
+		*/
 		render_texture[coords.xy] = tex_color + (float4(color, 1) - tex_color) / state.num_frames;
 	} else {
 		render_texture[coords.xy] = float4(color, 1);

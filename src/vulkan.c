@@ -477,7 +477,7 @@ VulkanState setup_renderer(
 
 	bool found_desired_present_mode = false;
 	FOR(present_mode_index, present_mode_count) {
-		if (present_modes[present_mode_index] == VK_PRESENT_MODE_MAILBOX_KHR) {
+		if (present_modes[present_mode_index] == VK_PRESENT_MODE_IMMEDIATE_KHR) {
 			vulkan_state.present_mode = present_modes[present_mode_index];
 			found_desired_present_mode = true;
 			break;
@@ -577,7 +577,8 @@ VulkanState setup_renderer(
 		.extent.depth = 1,
 		.mipLevels = 1,
 		.arrayLayers = 1,
-		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		//.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.format = VK_FORMAT_R32G32B32A32_SFLOAT,
 		.tiling = VK_IMAGE_TILING_OPTIMAL,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,

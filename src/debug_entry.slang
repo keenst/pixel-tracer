@@ -53,12 +53,14 @@ void main(int3 coords : SV_DispatchThreadID) {
 	}
 #endif
 
+/*
 	// Compute color
 	const int mesh_threshold = 64;
-	const int scene_threshold = 8;
+	const int scene_threshold = 16;
 	float3 sample_color = float3(0);
-	if (	ray_debug_info.scene_nodes > scene_threshold ||
-			ray_debug_info.mesh_aabb_tests > mesh_threshold) {
+	if (ray_debug_info.scene_nodes > scene_threshold ||
+		ray_debug_info.mesh_aabb_tests > mesh_threshold)
+	{
 		sample_color = float3(1, 1, 1);
 	} else {
 		sample_color = float3(
@@ -66,6 +68,9 @@ void main(int3 coords : SV_DispatchThreadID) {
 				0,
 				(float)ray_debug_info.mesh_aabb_tests / mesh_threshold);
 	}
+*/
 
+	Object object = object_buffer[closest_hit.object_index];
+	float3 sample_color = mul(mul(float4(closest_hit.normal / 2 + 0.5f, 0), object.transform), transpose(object.inv_transform)).xyz;
 	render_texture[coords.xy] = float4(sample_color, 1);
 }

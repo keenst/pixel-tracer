@@ -52,9 +52,13 @@ struct HitResult {
 	float t;
 	Ray ray;
 	uint object_index;
+	/*
 	Tri tri;
 	float u;
 	float v;
+	*/
+	float3 color;
+	float3 normal;
 }
 
 struct Material {
@@ -79,4 +83,13 @@ struct RayDebugInfo {
 	uint mesh_aabb_tests;
 	uint scene_aabb_tests;
 	uint scene_nodes;
+}
+
+struct Angle {
+	float theta;
+	float phi;
+
+	Angle operator+(Angle other) {
+		return { theta + other.theta, phi + other.phi };
+	}
 }

@@ -36,6 +36,9 @@ typedef struct GlobalMemory_ {
 	PlatformData* platform_data;
 	RendererState renderer_state;
 
+	float total_time;
+	float scaled_time;
+
 	Arena* arena_stack[ARENA_STACK_MAX];
 	int arena_stack_size;
 	Arena base_arena;

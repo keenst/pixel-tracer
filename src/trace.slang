@@ -7,10 +7,24 @@
 #define FOR(i, n) for (uint i = 0; i < n; i++)
 #define FLOAT3(arr) float3(arr[0], arr[1], arr[2])
 
+static float pi = 3.1415926535897932384626;
+
 static float random_counter = 0;
+static float2 global_random_seed = { 0, 0 };
+
 float random() {
-	return fract(sin(random_counter++ + renderer_state.time) * 1e5f);
+	//return fract(sin(random_counter++ + renderer_state.time) * 1e7f);
+	//return fract(sin(dot(float2(random_counter++ / 100, (random_counter + 31) / 100), float2(12.9898, 78.233))) * 43758.5453);
+	global_random_seed.x +=  7.0f / 1000;
+	global_random_seed.y += 31.0f / 1000;
+	return fract(sin(dot(global_random_seed, float2(12.9898, 78.233))) * 43758.5453);
 }
+
+/*
+float random(float2 st) {
+	return fract(sin(dot(st, float2(12.9898, 78.233))) * 43758.5453);
+}
+*/
 
 float random(float from, float to) {
 	return from + (to - from) * random();
@@ -28,11 +42,44 @@ float3 random_unit_vector() {
 
 float3 random_on_hemisphere(float3 normal) {
 	float3 vector = random_unit_vector();
-	if (dot(vector, normal) >= 0) {
+	if (dot(vector, normal) > 0) {
 		return vector;
 	} else {
 		return -vector;
 	}
+}
+
+Angle brdf_cosine_weighted() {
+	float u1 = random();
+	float u2 = random();
+
+	float theta = acos(sqrt(1 - u1));
+	float phi = u2 * pi * 2;
+
+	return { theta, phi };
+}
+
+float pdf_cosine_weighted(Angle angle) {
+	return (1.0f / pi) * cos(angle.theta) * sin(angle.theta);
+}
+
+float3 world_from_local(float3 local, float3 normal) {
+	float3 up = abs(normal.x) > 0.9f ? float3(0, 1, 0) : float3(1, 0, 0);
+	float3 tangent = normalize(cross(up, normal));
+	float3 bitangent = cross(normal, tangent);
+
+	return
+		local.x * tangent +
+		local.y * bitangent +
+		local.z * normal;
+}
+
+float3 vector_from_angle(Angle angle) {
+	return float3(
+			sin(angle.theta) * cos(angle.phi),
+			sin(angle.theta) * sin(angle.phi),
+			cos(angle.theta)
+	);
 }
 
 bool ray_vs_aabb(Ray ray, float3 aabb_min, float3 aabb_max, out HitInfo hit_info) {
@@ -345,19 +392,22 @@ bool hit_mesh_bvh(
 
 		out_result = {};
 
-		if (random() < object.material.roughness)
-		{
-			out_result.ray.direction = normal + random_unit_vector();
-		}
-		else
-		{
+		if (random() < object.material.roughness) {
+			//out_result.ray.direction = normal + random_unit_vector();
+			out_result.ray.direction = random_on_hemisphere(normal);
+		} else {
 			out_result.ray.direction = reflect(ray.direction, normal);
 		}
 
+		out_result.color = object.material.color;
+
 		out_result.ray.start = closest_hit.intersect_point + normal * 1e-6f;
 		out_result.t = closest_hit.t;
+		out_result.normal = normal;
+		/*
 		out_result.u = closest_hit.u;
 		out_result.v = closest_hit.v;
+		*/
 		out_result.object_index = object_index;
 		return true;
 	}

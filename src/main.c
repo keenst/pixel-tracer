@@ -351,62 +351,72 @@ void load_trace_shader(char* path) {
 	};
 
 	VK_ASSERT(vkCreateComputePipelines(
-				vulkan_state->device,
-				VK_NULL_HANDLE,
-				1, &compute_pipeline_create_info,
-				NULL,
-				&vulkan_state->compute_pipeline));
+			vulkan_state->device,
+			VK_NULL_HANDLE,
+			1, &compute_pipeline_create_info,
+			NULL,
+			&vulkan_state->compute_pipeline));
 
 	printf("Rebuilt compute pipeline\n");
 }
 
 __declspec(dllexport)
-	void game_update_and_render(Inputs inputs) {
-		// Check for changes to compute shader
-		char* shader_path = SHADER_PATHS[global->current_render_mode];
-		uint64 compute_shader_modified_time = platform_get_file_modified_time(shader_path);
-		if (compute_shader_modified_time > global->prev_compute_shader_modified_time) {
-			global->prev_compute_shader_modified_time = compute_shader_modified_time;
-			load_trace_shader(shader_path);
-		}
+void game_update_and_render(Inputs inputs) {
+	// Check for changes to compute shader
+	char* shader_path = SHADER_PATHS[global->current_render_mode];
+	uint64 compute_shader_modified_time = platform_get_file_modified_time(shader_path);
+	if (compute_shader_modified_time > global->prev_compute_shader_modified_time) {
+		global->prev_compute_shader_modified_time = compute_shader_modified_time;
+		load_trace_shader(shader_path);
+	}
 
-		// Input
-		if (inputs.f1 && !global->prev_inputs.f1) {
-			if (global->current_render_mode != RM_NORMAL) {
-				global->current_render_mode = RM_NORMAL;
-				load_trace_shader(SHADER_PATHS[global->current_render_mode]);
-			}
+	// Input
+	if (inputs.f1 && !global->prev_inputs.f1) {
+		if (global->current_render_mode != RM_NORMAL) {
+			global->current_render_mode = RM_NORMAL;
+			load_trace_shader(SHADER_PATHS[global->current_render_mode]);
 		}
+	}
 
-		if (inputs.f2 && !global->prev_inputs.f2) {
-			if (global->current_render_mode != RM_DEBUG) {
-				global->current_render_mode = RM_DEBUG;
-				load_trace_shader(SHADER_PATHS[global->current_render_mode]);
-			}
+	if (inputs.f2 && !global->prev_inputs.f2) {
+		if (global->current_render_mode != RM_DEBUG) {
+			global->current_render_mode = RM_DEBUG;
+			load_trace_shader(SHADER_PATHS[global->current_render_mode]);
 		}
+	}
 
-		FOR(i, 10) {
-			if (!inputs.nums[i] || global->prev_inputs.nums[i]) continue;
-			global->current_scene_id = i;
-		}
+	FOR(i, 10) {
+		if (!inputs.nums[i] || global->prev_inputs.nums[i]) continue;
+		global->current_scene_id = i;
+	}
 
-		if (inputs.p && !global->prev_inputs.p) {
-			global->renderer_state.progressive ^= true;
+	if (inputs.p && !global->prev_inputs.p) {
+		global->renderer_state.progressive ^= true;
+
+		if (global->renderer_state.progressive) {
 			global->renderer_state.num_frames = 1;
+			global->renderer_state.sample_count = 128;
+		} else {
+			global->renderer_state.sample_count = 16;
 		}
+	}
 
-		// Update
-		float total_time = global->platform_data->total_time;
-		float delta_time = global->platform_data->delta_time;
+	// Update
+	float delta_time = global->platform_data->delta_time;
+	global->total_time += delta_time;
+
+	if (!global->renderer_state.progressive)
+	{
+		global->scaled_time += delta_time;
 
 		// Movement
 		static float yaw = 0;
 		static float pitch = 0;
 
 		if (inputs.right_mouse) {
-			const float mouse_sensitivity = 80.0f;
-			yaw += inputs.mouse_delta_x * delta_time * mouse_sensitivity;
-			pitch += inputs.mouse_delta_y * delta_time * mouse_sensitivity;
+			const float mouse_sensitivity = 4.0f;
+			yaw += inputs.mouse_delta_x * mouse_sensitivity;
+			pitch += inputs.mouse_delta_y * mouse_sensitivity;
 			global->platform_data->mouse_locked = true;
 		} else {
 			global->platform_data->mouse_locked = false;
@@ -442,9 +452,9 @@ __declspec(dllexport)
 
 		move_direction = vec3_normalized(move_direction);
 
-		float camera_speed = 2.0f;
+		float camera_speed = 6.0f;
 		if (inputs.shift) {
-			camera_speed = 4.0f;
+			camera_speed = 12.0f;
 		}
 
 		Mat4 y_rot = mat4_rot_y(yaw);
@@ -474,18 +484,40 @@ __declspec(dllexport)
 		global->renderer_state.camera_transform.arr[2][3] = position.z;
 
 		Object* lit_monkey = get_object("lit_monkey");
-		lit_monkey->position.y = sinf(total_time);
+		lit_monkey->position = vec3(-5, 0, 0);
+		lit_monkey->position.y = sinf(global->scaled_time);
 		lit_monkey->orientation.y += delta_time;
 
-		// Draw
-		global->renderer_state.time = global->platform_data->total_time;
-		draw_frame(&global->vulkan_state, global->current_frame, global->renderer_state);
-		global->current_frame = (global->current_frame + 1) % 2;
+		Object* green_light = get_object("green_light");
+		green_light->position = vec3(cosf(global->scaled_time) * 2, 0.5f, -5 + sinf(global->scaled_time) * 2);
 
-		global->prev_inputs = inputs;
+		Object* magenta_monkey = get_object("magenta_monkey");
+		magenta_monkey->position = vec3(sinf(global->scaled_time * 1.5f), 0.5f, 6);
+		magenta_monkey->scale = vec3_scale(vec3(1, 1, 1), cosf(global->scaled_time * 3) / 4 + 0.5f);
+		magenta_monkey->orientation.z += delta_time;
 
-		clear_arena(&global->frame_arena);
+		/*
+		Object* merry_go_round = get_object("merry_go_round");
+		merry_go_round->position = vec3(cosf(global->scaled_time) * 20, 2, sinf(global->scaled_time) * 20);
+		merry_go_round->orientation.x = pi / 2;
+		merry_go_round->orientation.y = (sinf(global->scaled_time) / 2 + 0.5f) * pi;
+		*/
 	}
+
+	// Draw
+	global->renderer_state.time = global->total_time;
+	while (global->renderer_state.time > 1)
+	{
+		global->renderer_state.time -= 1;
+	}
+
+	draw_frame(&global->vulkan_state, global->current_frame, global->renderer_state);
+	global->current_frame = (global->current_frame + 1) % 2;
+
+	global->prev_inputs = inputs;
+
+	clear_arena(&global->frame_arena);
+}
 
 void game_start() {
 	// Cornell box
@@ -568,6 +600,7 @@ void game_start() {
 
 	Object* lit_plane = register_object("lit_plane");
 	lit_plane->mesh_id = get_mesh_id("plane.obj");
+	lit_plane->material.roughness = 1;
 	lit_plane->position = vec3(0, -2 - 1e-5f, 0);
 	lit_plane->scale = vec3(10, 1, 10);
 
@@ -576,6 +609,33 @@ void game_start() {
 	red_cube->material.color = vec3(1, 0, 0);
 	red_cube->position = vec3(3, -2, 0);
 	red_cube->scale = vec3(0.5f, 5, 1);
+
+	Object* green_sphere = register_object("green_sphere");
+	green_sphere->mesh_id = get_mesh_id("sphere.obj");
+	green_sphere->material.color = vec3(0.4, 1, 0.2);
+	green_sphere->position = vec3(3, 0, 2);
+
+	Object* blue_sphere = register_object("blue_sphere");
+	blue_sphere->mesh_id = get_mesh_id("sphere.obj");
+	blue_sphere->material.color = vec3(1, 1, 1);
+	blue_sphere->position = vec3(-5, 2, -5);
+	blue_sphere->scale = vec3(2, 2, 2);
+
+	Object* green_light = register_object("green_light");
+	green_light->mesh_id = get_mesh_id("sphere.obj");
+	green_light->material.color = vec3(0, 6, 0);
+
+	Object* magenta_monkey = register_object("magenta_monkey");
+	magenta_monkey->mesh_id = get_mesh_id("suzanne.obj");
+	magenta_monkey->material.roughness = 0.9f;
+	magenta_monkey->material.color = vec3(0, 1, 1);
+
+	/*
+	Object* merry_go_round = register_object("merry_go_round");
+	merry_go_round->mesh_id = get_mesh_id("plane.obj");
+	merry_go_round->material.color = vec3(1.5, 1.5, 1.5);
+	merry_go_round->scale = vec3(5, 1, 5);
+	*/
 }
 
 __declspec(dllexport)
