@@ -19,6 +19,7 @@ typedef struct {
 typedef struct {
 	uint32 root_node_offset;
 	uint32 triangle_offset;
+	uint32 num_triangles;
 	Vec3 centroid;
 	Vec3 min_bounds;
 	Vec3 max_bounds;

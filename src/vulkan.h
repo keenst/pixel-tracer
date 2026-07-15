@@ -16,8 +16,8 @@ typedef struct {
 
 	uint32 bvh_root_offset;
 	uint32 triangle_offset;
+	uint32 num_triangles;
 	bool32 is_light;
-	int32 pad_0[1];
 
 	Material material;
 } RenderObject;

@@ -140,6 +140,7 @@ void draw_frame(VulkanState* vulkan_state, uint32 current_frame, RendererState r
 
 		render_object->bvh_root_offset = global->meshes[object->mesh_id].root_node_offset;
 		render_object->triangle_offset = global->meshes[object->mesh_id].triangle_offset;
+		render_object->num_triangles = global->meshes[object->mesh_id].num_triangles;
 
 		render_object->material = object->material;
 	}
@@ -397,7 +398,7 @@ void game_update_and_render(Inputs inputs) {
 			global->renderer_state.num_frames = 1;
 			global->renderer_state.sample_count = 128;
 		} else {
-			global->renderer_state.sample_count = 16;
+			global->renderer_state.sample_count = 4;
 		}
 	}
 
@@ -469,8 +470,8 @@ void game_update_and_render(Inputs inputs) {
 				global->renderer_state.camera_transform.arr[2][2]);
 
 		Vec3 up = vec3(0, 1, 0);
-		Vec3 right = vec3_cross(up, camera_forward);
-		Vec3 forward = vec3_cross(up, right); 
+		Vec3 right = vec3_normalized(vec3_cross(up, camera_forward));
+		Vec3 forward = vec3_normalized(vec3_cross(up, right));
 
 		move_direction = vec3_add(
 				vec3(0, move_direction.y, 0),
@@ -697,6 +698,8 @@ void game_init(
 		uint32 num_triangles = parse_obj(file_contents, &triangles);
 		printf("- Triangles: %i\n", num_triangles);
 
+		mesh.num_triangles = num_triangles;
+
 		// Generate centroid and bounds
 		float min_x = FLT_MAX;
 		float min_y = FLT_MAX;
@@ -770,10 +773,10 @@ void game_init(
 		Vec3 first_pixel_location = vec3_add(viewport_upper_left, vec3_scale(vec3_add(pixel_delta_u, pixel_delta_v), 0.5f));
 
 		global->renderer_state = (RendererState){
-			.sample_count = 16,
-				.pixel_delta_u = pixel_delta_u,
-				.pixel_delta_v = pixel_delta_v,
-				.first_pixel_location = first_pixel_location
+			.sample_count = 4,
+			.pixel_delta_u = pixel_delta_u,
+			.pixel_delta_v = pixel_delta_v,
+			.first_pixel_location = first_pixel_location
 		};
 
 		// Set up camera
@@ -796,30 +799,30 @@ void game_init(
 	/*===============================*/
 
 	memcpy(
-			(BVHNodeFlat*)global->vulkan_state.mesh_bvh_buffer.mapped,
-			global->bvh_buffer,
-			global->bvh_buffer_size * sizeof(BVHNodeFlat));
+		(BVHNodeFlat*)global->vulkan_state.mesh_bvh_buffer.mapped,
+		global->bvh_buffer,
+		global->bvh_buffer_size * sizeof(BVHNodeFlat));
 
 	FOR(i, global->triangle_buffer_size) {
 		GPUTriangle gpu_triangle;
 		FOR(j, 3) {
 			memcpy(
-					gpu_triangle.vertices[j].position.arr,
-					global->triangle_buffer[i].vertices[j].position.arr,
-					3 * sizeof(float));
+				gpu_triangle.vertices[j].position.arr,
+				global->triangle_buffer[i].vertices[j].position.arr,
+				3 * sizeof(float));
 			memcpy(
-					gpu_triangle.vertices[j].normal.arr,
-					global->triangle_buffer[i].vertices[j].normal.arr,
-					3 * sizeof(float));
+				gpu_triangle.vertices[j].normal.arr,
+				global->triangle_buffer[i].vertices[j].normal.arr,
+				3 * sizeof(float));
 			memcpy(
-					gpu_triangle.vertices[j].tex_coord.arr,
-					global->triangle_buffer[i].vertices[j].tex_coord.arr,
-					2 * sizeof(float));
+				gpu_triangle.vertices[j].tex_coord.arr,
+				global->triangle_buffer[i].vertices[j].tex_coord.arr,
+				2 * sizeof(float));
 		}
 
 		memcpy(
-				(GPUTriangle*)global->vulkan_state.triangle_buffer.mapped + i,
-				&gpu_triangle,
-				sizeof(GPUTriangle));
+			(GPUTriangle*)global->vulkan_state.triangle_buffer.mapped + i,
+			&gpu_triangle,
+			sizeof(GPUTriangle));
 	}
 }

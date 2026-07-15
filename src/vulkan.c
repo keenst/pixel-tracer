@@ -630,7 +630,7 @@ VulkanState setup_renderer(
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.image = vulkan_state.render_texture_image,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
-		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.format = VK_FORMAT_R32G32B32A32_SFLOAT,
 		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		.subresourceRange.baseMipLevel = 0,
 		.subresourceRange.levelCount = 1,

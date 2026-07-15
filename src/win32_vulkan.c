@@ -12,7 +12,7 @@ VulkanPlatformData win32_init_vulkan(HWND window, HINSTANCE instance) {
 
 	// List extensions and layers
 	const char* enabled_layers[] = {
-		"VK_LAYER_KHRONOS_validation"
+		//"VK_LAYER_KHRONOS_validation"
 	};
 
 	const char* instance_extensions[] = {
@@ -51,7 +51,7 @@ VulkanPlatformData win32_init_vulkan(HWND window, HINSTANCE instance) {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		.pApplicationName = "Pixel tracer",
 		.applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-		.apiVersion = VK_API_VERSION_1_3
+		.apiVersion = VK_API_VERSION_1_4
 	};
 
 	VkInstanceCreateInfo create_info = {

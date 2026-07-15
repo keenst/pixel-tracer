@@ -35,25 +35,6 @@ void main(int3 coords : SV_DispatchThreadID) {
 
 	hit_something = hit_scene_bvh(ray, closest_hit, ray_debug_info);
 
-#if 0
-	FOR(object_index, state.num_objects) {
-		Object object = object_buffer[object_index];
-
-		Ray local_ray;
-		local_ray.start = mul(float4(ray.start, 1), object.inv_transform).xyz;
-		local_ray.direction = mul(float4(ray.direction, 0), object.inv_transform).xyz;
-
-		HitResult hit;
-		if (!hit_mesh_bvh(local_ray, object_index, hit, ray_debug_info)) continue;
-
-		if (hit.t > closest_hit.t) continue;
-
-		closest_hit = hit;
-		hit_something = true;
-	}
-#endif
-
-/*
 	// Compute color
 	const int mesh_threshold = 64;
 	const int scene_threshold = 16;
@@ -68,9 +49,6 @@ void main(int3 coords : SV_DispatchThreadID) {
 				0,
 				(float)ray_debug_info.mesh_aabb_tests / mesh_threshold);
 	}
-*/
 
-	Object object = object_buffer[closest_hit.object_index];
-	float3 sample_color = mul(mul(float4(closest_hit.normal / 2 + 0.5f, 0), object.transform), transpose(object.inv_transform)).xyz;
 	render_texture[coords.xy] = float4(sample_color, 1);
 }

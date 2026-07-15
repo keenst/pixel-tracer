@@ -59,6 +59,7 @@ struct HitResult {
 	*/
 	float3 color;
 	float3 normal;
+	float3 point_hit;
 }
 
 struct Material {
@@ -68,11 +69,11 @@ struct Material {
 
 struct Object {
 	float4x4 transform;
-
 	float4x4 inv_transform;
 
 	uint32_t bvh_root_offset;
 	uint32_t triangle_offset;
+	uint32_t num_triangles;
 	bool is_light;
 
 	Material material;
@@ -83,13 +84,4 @@ struct RayDebugInfo {
 	uint mesh_aabb_tests;
 	uint scene_aabb_tests;
 	uint scene_nodes;
-}
-
-struct Angle {
-	float theta;
-	float phi;
-
-	Angle operator+(Angle other) {
-		return { theta + other.theta, phi + other.phi };
-	}
 }

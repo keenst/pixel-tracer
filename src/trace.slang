@@ -49,37 +49,156 @@ float3 random_on_hemisphere(float3 normal) {
 	}
 }
 
-Angle brdf_cosine_weighted() {
-	float u1 = random();
-	float u2 = random();
-
-	float theta = acos(sqrt(1 - u1));
-	float phi = u2 * pi * 2;
-
-	return { theta, phi };
+float3 vector_from_angles(float theta, float phi) {
+	return float3(
+			sin(theta) * cos(phi),
+			sin(theta) * sin(phi),
+			cos(theta)
+	);
 }
 
-float pdf_cosine_weighted(Angle angle) {
-	return (1.0f / pi) * cos(angle.theta) * sin(angle.theta);
+#if 0
+float3 brdf_phong(float3 outgoing, float3 normal, Material material) {
+	float diffuse_factor = material.roughness; // k_d
+	float specular_factor = 1 - diffuse_factor; // k_s
+
+	float3 reflection_axis = normalize(reflect(outgoing, normal));
+
+	/* Meant to match Sebastian Lagues specular model.
+	 * The original takes the smoothness factor from the material but I just hardcoded it for now.
+	 * Taken from this repo:
+	 * https://github.com/ComputationallyBased/RayTracingMIS/blob/main/Assets/Scripts/Shaders/RayTracer.shader
+	 */
+	float n = (2.0f / (pow(0.0f, 3.0f))) - 2.0f; 
+
+	float3 incoming;
+	if (random() < diffuse_factor) {
+		incoming = random_on_hemisphere(normal);
+	} else {
+		float rand1 = random();
+		float rand2 = random();
+
+		float cos_alpha = pow(rand1, 1.0f / (n + 1.0f));
+		float sin_alpha = sqrt(max(0.0f, 1.0f - cos_alpha * cos_alpha));
+		float phi		= 2.0f * pi * rand2;
+
+		float3 local = float3(cos(phi) * sin_alpha, sin(phi) * sin_alpha, cos_alpha);
+		incoming = transform_basis(local, reflection_axis);
+	}
+
+	return incoming;
 }
 
-float3 world_from_local(float3 local, float3 normal) {
+float pdf_phong(float3 outgoing, float3 normal, float3 incoming, Material material) {
+	float diffuse_factor = material.roughness; // k_d
+	float specular_factor = 1 - diffuse_factor; // k_s
+
+	float3 reflection_axis = normalize(reflect(outgoing, normal));
+
+	/* Meant to match Sebastian Lagues specular model.
+	 * The original takes the smoothness factor from the material but I just hardcoded it for now.
+	 * Taken from this repo:
+	 * https://github.com/ComputationallyBased/RayTracingMIS/blob/main/Assets/Scripts/Shaders/RayTracer.shader
+	 */
+	float n = (2.0f / (pow(0.0f, 3.0f))) - 2.0f; 
+
+	float prob_diffuse = 1.0f / (4.0f * pi);
+	float prob_specular = ((n + 1) / (2.0f * pi)) * pow(max(dot(incoming, reflection_axis), 0.001f), n);
+
+	return diffuse_factor * prob_diffuse + specular_factor * prob_specular;
+}
+#endif
+
+float3 brdf_phong(float3 outgoing, float3 normal, float3 incoming, Material material) {
+	float3 reflection_axis = reflect(outgoing, normal);
+	float cos_alpha = saturate(dot(reflection_axis, outgoing));
+	float cos_theta = saturate(dot(reflection_axis, incoming));
+
+	float specular_exponent = 8;
+
+	float specular_part = ((specular_exponent + 2) / (2 * pi)) * pow(cos_alpha, specular_exponent);
+	float diffuse_part = 1.0f / pi;
+
+	float specular_factor = 1 - material.roughness;
+	float diffuse_factor = material.roughness;
+
+	// TODO(leo): This is theoretically the correct one, doesn't work currently tho.
+	//float specular_pdf = ((specular_exponent + 1) / (2 * pi)) * pow(cos_alpha, specular_exponent);
+	float specular_pdf = ((specular_exponent + 1) / (2 * pi));
+	float diffuse_pdf = (1.0f / pi) * cos_theta;
+	specular_pdf = 1;
+	diffuse_pdf = 1;
+
+	specular_pdf = max(1e-5f, specular_pdf);
+	diffuse_pdf = max(1e-5f, diffuse_pdf);
+
+	float brdf = specular_factor * specular_part / specular_pdf + diffuse_factor * diffuse_part / diffuse_pdf;
+	//float brdf = specular_factor * specular_part + diffuse_factor * diffuse_part;
+
+	return material.color * brdf;// / pdf;
+}
+
+float pdf_phong(float3 outgoing, float3 normal) {
+	float3 reflection_axis = reflect(outgoing, normal);
+	float cos_alpha = dot(reflection_axis, outgoing);
+
+	float specular_exponent = 8;
+
+	return ((specular_exponent + 1) / (2 * pi)) * pow(cos_alpha, specular_exponent);
+}
+
+float3 sample_phong(float3 outgoing, float3 normal, Material material) {
+	if (random() < material.roughness) {
+		return random_on_hemisphere(normal);
+	} else {
+		return reflect(outgoing, normal);
+	}
+}
+
+float3 sample_random_point_on_random_light(out float3 normal, out float pdf, out float3 light_color) {
+	int light_index = (int)random(0, renderer_state.num_lights);
+	Object light = object_buffer[light_index];
+
+	int tri_index = (int)random(light.triangle_offset, light.triangle_offset + light.num_triangles);
+	Tri tri = triangle_buffer[tri_index];
+
+	float3 a = mul(float4(tri.verts[0].position, 1.0f), light.transform).xyz;
+	float3 b = mul(float4(tri.verts[1].position, 1.0f), light.transform).xyz;
+	float3 c = mul(float4(tri.verts[2].position, 1.0f), light.transform).xyz;
+
+	float u = random();
+	float v = random();
+
+	if (u + v > 1) {
+		u = 1 - u;
+		v = 1 - v;
+	}
+
+	float3 sampled_point = u * a + v * b + (1 - u - v) * c;
+
+	normal = u * tri.verts[0].normal + v * tri.verts[1].normal + (1 - u - v) * tri.verts[2].normal;
+	normal = normalize(mul(float4(normal, 0), mul(light.transform, transpose(light.inv_transform))).xyz);
+
+	float area = 0.5f * length(cross(a - b, a - c));
+
+	pdf =  1.0f / (float)renderer_state.num_lights;
+	pdf *= 1.0f / (float)light.num_triangles;
+	pdf *= 1.0f / area;
+
+	light_color = light.material.color;
+
+	return sampled_point;
+}
+
+float3 transform_basis(float3 local, float3 normal) {
 	float3 up = abs(normal.x) > 0.9f ? float3(0, 1, 0) : float3(1, 0, 0);
-	float3 tangent = normalize(cross(up, normal));
+	float3 tangent = normalize(cross(normal, up));
 	float3 bitangent = cross(normal, tangent);
 
 	return
-		local.x * tangent +
-		local.y * bitangent +
+		local.x * bitangent +
+		local.y * tangent +
 		local.z * normal;
-}
-
-float3 vector_from_angle(Angle angle) {
-	return float3(
-			sin(angle.theta) * cos(angle.phi),
-			sin(angle.theta) * sin(angle.phi),
-			cos(angle.theta)
-	);
 }
 
 bool ray_vs_aabb(Ray ray, float3 aabb_min, float3 aabb_max, out HitInfo hit_info) {
@@ -222,7 +341,8 @@ bool ray_vs_tri(Ray ray, Tri tri, out HitInfo hit_info) {
 bool hit_scene_bvh(
 		Ray ray,
 		out HitResult out_result,
-		IN_DEBUG(inout RayDebugInfo ray_debug_info)) {
+		IN_DEBUG(inout RayDebugInfo ray_debug_info))
+{
 	float closest_t = 1.#INF;
 	HitResult closest_result = {};
 
@@ -319,7 +439,8 @@ bool hit_mesh_bvh(
 		Ray ray,
 		uint object_index,
 		out HitResult out_result,
-		IN_DEBUG(inout RayDebugInfo ray_debug_info)) {
+		IN_DEBUG(inout RayDebugInfo ray_debug_info))
+{
 	float closest_t = 1.#INF;
 	HitInfo closest_hit = {};
 
@@ -392,18 +513,15 @@ bool hit_mesh_bvh(
 
 		out_result = {};
 
-		if (random() < object.material.roughness) {
-			//out_result.ray.direction = normal + random_unit_vector();
-			out_result.ray.direction = random_on_hemisphere(normal);
-		} else {
-			out_result.ray.direction = reflect(ray.direction, normal);
-		}
+		out_result.ray.direction = sample_phong(ray.direction, normal, object.material);
 
 		out_result.color = object.material.color;
 
 		out_result.ray.start = closest_hit.intersect_point + normal * 1e-6f;
 		out_result.t = closest_hit.t;
 		out_result.normal = normal;
+		out_result.point_hit = mul(float4(ray.start + ray.direction * closest_hit.t, 1), object.transform).xyz;
+
 		/*
 		out_result.u = closest_hit.u;
 		out_result.v = closest_hit.v;
