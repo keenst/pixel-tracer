@@ -12,7 +12,7 @@ VulkanPlatformData win32_init_vulkan(HWND window, HINSTANCE instance) {
 
 	// List extensions and layers
 	const char* enabled_layers[] = {
-		//"VK_LAYER_KHRONOS_validation"
+		"VK_LAYER_KHRONOS_validation"
 	};
 
 	const char* instance_extensions[] = {

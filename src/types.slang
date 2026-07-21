@@ -52,11 +52,9 @@ struct HitResult {
 	float t;
 	Ray ray;
 	uint object_index;
-	/*
 	Tri tri;
 	float u;
 	float v;
-	*/
 	float3 color;
 	float3 normal;
 	float3 point_hit;
@@ -65,6 +63,8 @@ struct HitResult {
 struct Material {
 	float3 color;
 	float roughness;
+	uint texture_id;
+	float[3] __padding;
 }
 
 struct Object {

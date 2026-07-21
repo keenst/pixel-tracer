@@ -6,6 +6,7 @@ typedef enum {
 
 typedef uint32 ObjectID;
 typedef uint32 MeshID;
+typedef uint32 TextureID;
 
 typedef struct {
 	Vec3 position;
@@ -24,6 +25,11 @@ typedef struct {
 	Vec3 min_bounds;
 	Vec3 max_bounds;
 } Mesh;
+
+typedef struct {
+	VkImage image;
+	VkImageView image_view;
+} Texture;
 
 typedef struct {
 	Mesh* mesh;
@@ -61,6 +67,10 @@ typedef struct GlobalMemory_ {
 	Mesh meshes[64];
 	char mesh_names[NAME_LEN][64];
 	uint32 num_meshes;
+
+	Texture textures[MAX_TEXTURE_COUNT];
+	char texture_names[NAME_LEN][MAX_TEXTURE_COUNT];
+	uint32 num_textures;
 
 	BVHNodeFlat* bvh_buffer;
 	uint bvh_buffer_size;

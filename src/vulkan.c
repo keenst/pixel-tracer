@@ -645,8 +645,8 @@ VulkanState setup_renderer(
 			NULL,
 			&render_texture_image_view));
 
-	// Create texture sampler
-	VkSamplerCreateInfo sampler_info = {
+	// Create texture samplers
+	VkSamplerCreateInfo target_sampler_info = {
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 		.magFilter = VK_FILTER_LINEAR,
 		.minFilter = VK_FILTER_LINEAR,
@@ -661,8 +661,25 @@ VulkanState setup_renderer(
 		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST
 	};
 
+	VkSamplerCreateInfo texture_sampler_info = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+		.anisotropyEnable = VK_FALSE,
+		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+		.unnormalizedCoordinates = VK_FALSE,
+		.compareEnable = VK_FALSE,
+		.compareOp = VK_COMPARE_OP_ALWAYS,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST
+	};
+
+	VkSampler target_sampler;
+	VK_ASSERT(vkCreateSampler(vulkan_state.device, &target_sampler_info, NULL, &target_sampler));
 	VkSampler texture_sampler;
-	VK_ASSERT(vkCreateSampler(vulkan_state.device, &sampler_info, NULL, &texture_sampler));
+	VK_ASSERT(vkCreateSampler(vulkan_state.device, &texture_sampler_info, NULL, &texture_sampler));
 
 	/*===================*/
 	/*  DESCRIPTOR SETS  */
@@ -674,8 +691,13 @@ VulkanState setup_renderer(
 		.descriptorCount = MAX_FRAMES_IN_FLIGHT
 	};
 
-	VkDescriptorPoolSize sampler_pool_size = {
+	VkDescriptorPoolSize combined_sampler_pool_size = {
 		.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = MAX_FRAMES_IN_FLIGHT
+	};
+
+	VkDescriptorPoolSize sampler_pool_size = {
+		.type = VK_DESCRIPTOR_TYPE_SAMPLER,
 		.descriptorCount = MAX_FRAMES_IN_FLIGHT
 	};
 
@@ -689,20 +711,27 @@ VulkanState setup_renderer(
 		.descriptorCount = MAX_FRAMES_IN_FLIGHT
 	};
 
+	VkDescriptorPoolSize sampled_image_pool_size = {
+		.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+		.descriptorCount = MAX_FRAMES_IN_FLIGHT * MAX_TEXTURE_COUNT
+	};
+
 	VkDescriptorPoolSize pool_sizes[] = {
 		uniform_pool_size,
-		sampler_pool_size,
+		combined_sampler_pool_size,
 		compute_pool_size,
 		storage_buffer_pool_size,
 		storage_buffer_pool_size,
 		storage_buffer_pool_size,
 		storage_buffer_pool_size,
-		storage_buffer_pool_size
+		storage_buffer_pool_size,
+		sampler_pool_size,
+		sampled_image_pool_size
 	};
 
 	VkDescriptorPoolCreateInfo pool_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.poolSizeCount = 8,
+		.poolSizeCount = array_count(pool_sizes),
 		.pPoolSizes = pool_sizes,
 		.maxSets = MAX_FRAMES_IN_FLIGHT * 2
 	};
@@ -758,7 +787,7 @@ VulkanState setup_renderer(
 		VkDescriptorImageInfo image_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, // NOTE: Could be bad? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL is suggested by the tutorial, but I need to write to it as well
 			.imageView = render_texture_image_view,
-			.sampler = texture_sampler
+			.sampler = target_sampler
 		};
 
 		VkWriteDescriptorSet write_descriptors[1];
@@ -1013,68 +1042,21 @@ VulkanState setup_renderer(
 	};
 
 	// Descriptor sets
-	VkDescriptorSetLayoutBinding rw_texture_layout_binding = {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding uniform_buffer_layout_binding = {
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding triangle_buffer_layout_binding = {
-		.binding = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding mesh_bvh_buffer_layout_binding = {
-		.binding = 3,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding object_buffer_layout_binding = {
-		.binding = 4,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding object_index_buffer_layout_binding = {
-		.binding = 5,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding scene_bvh_buffer_layout_binding = {
-		.binding = 6,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
 	VkDescriptorSetLayoutBinding compute_descriptor_set_layout_bindings[] = {
-		rw_texture_layout_binding,
-		uniform_buffer_layout_binding,
-		triangle_buffer_layout_binding,
-		mesh_bvh_buffer_layout_binding,
-		object_buffer_layout_binding,
-		object_index_buffer_layout_binding,
-		scene_bvh_buffer_layout_binding
+		{ 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 	1, VK_SHADER_STAGE_COMPUTE_BIT }, // Render target image
+		{ 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Uniform buffer
+		{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Triangle buffer
+		{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Mesh BVH buffer
+		{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Object buffer
+		{ 5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Object index buffer
+		{ 6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT }, // Scene BVH buffer
+		{ 7, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  MAX_TEXTURE_COUNT, VK_SHADER_STAGE_COMPUTE_BIT }, // Texture array
+		{ 8, VK_DESCRIPTOR_TYPE_SAMPLER,		1, VK_SHADER_STAGE_COMPUTE_BIT }  // Texture sampler
 	};
 
 	VkDescriptorSetLayoutCreateInfo compute_descriptor_set_layout_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 7,
+		.bindingCount = array_count(compute_descriptor_set_layout_bindings),
 		.pBindings = compute_descriptor_set_layout_bindings
 	};
 
@@ -1200,7 +1182,7 @@ VulkanState setup_renderer(
 		VkDescriptorImageInfo storage_buffer_info = {
 			.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 			.imageView = render_texture_image_view,
-			.sampler = texture_sampler
+			.sampler = target_sampler
 		};
 
 		VkDescriptorBufferInfo triangle_buffer_info = {
@@ -1233,7 +1215,11 @@ VulkanState setup_renderer(
 			.range = VK_WHOLE_SIZE
 		};
 
-		VkWriteDescriptorSet write_descriptors[7];
+		VkDescriptorImageInfo texture_sampler_info = {
+			.sampler = texture_sampler
+		};
+
+		VkWriteDescriptorSet write_descriptors[8];
 
 		write_descriptors[0] = (VkWriteDescriptorSet){
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1305,7 +1291,17 @@ VulkanState setup_renderer(
 			.pBufferInfo = &scene_bvh_buffer_info
 		};
 
-		vkUpdateDescriptorSets(vulkan_state.device, 7, write_descriptors, 0, NULL);
+		write_descriptors[7] = (VkWriteDescriptorSet){
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vulkan_state.compute_descriptor_sets[i],
+			.dstBinding = 8,
+			.dstArrayElement = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.descriptorCount = 1,
+			.pImageInfo = &texture_sampler_info
+		};
+
+		vkUpdateDescriptorSets(vulkan_state.device, 8, write_descriptors, 0, NULL);
 	}
 
 	// Pipeline

@@ -3,10 +3,13 @@ enum { MAX_TRIANGLE_BUFFER_COUNT = 4096 };
 enum { MAX_MESH_BVH_BUFFER_COUNT = 4096 };
 enum { MAX_OBJECT_BUFFER_COUNT = 64 };
 enum { MAX_SCENE_BVH_BUFFER_COUNT = 128 };
+enum { MAX_TEXTURE_COUNT = 32 };
 
 typedef struct {
 	Vec3 color;
 	float roughness;
+	uint32 texture_id;
+	float __padding[3];
 } Material;
 
 typedef struct {

@@ -10,6 +10,146 @@ void register_mesh(Mesh mesh, const char* name) {
 	global->num_meshes++;
 }
 
+Texture load_texture_from_file(VulkanState* vulkan_state, char* path) {
+	int width, height, component_count;
+	uint8* data = stbi_load(path, &width, &height, &component_count, 0);
+
+	VkImageCreateInfo image_create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.extent.width = width,
+		.extent.height = height,
+		.extent.depth = 1,
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.samples = VK_SAMPLE_COUNT_1_BIT
+	};
+
+	VkImage image;
+	VK_ASSERT(vkCreateImage(
+			vulkan_state->device,
+			&image_create_info,
+			NULL,
+			&image));
+
+	VkMemoryRequirements texture_memory_requirements;
+	vkGetImageMemoryRequirements(
+			vulkan_state->device,
+			image,
+			&texture_memory_requirements);
+
+	VkMemoryAllocateInfo texture_memory_allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = texture_memory_requirements.size,
+		.memoryTypeIndex = find_vulkan_memory_type(vulkan_state, texture_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+	};
+
+	VkDeviceMemory image_memory;
+	VK_ASSERT(vkAllocateMemory(
+			vulkan_state->device,
+			&texture_memory_allocate_info,
+			NULL,
+			&image_memory));
+
+	vkBindImageMemory(
+			vulkan_state->device, 
+			image,
+			image_memory,
+			0);
+
+	VkImageViewCreateInfo image_view_create_info = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = VK_FORMAT_R8G8B8A8_UNORM,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.baseMipLevel = 0,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1
+	};
+
+	VkImageView image_view;
+	VK_ASSERT(vkCreateImageView(
+			vulkan_state->device,
+			&image_view_create_info,
+			NULL,
+			&image_view));
+
+	// Copy the contents
+	transition_image_layout(
+			vulkan_state,
+			image,
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+	VkBuffer buffer;
+	VkDeviceMemory buffer_memory;
+	create_buffer(
+			vulkan_state,
+			(VkDeviceSize)(width * height * component_count),
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			&buffer,
+			&buffer_memory);
+
+	void* buffer_mapped;
+	vkMapMemory(
+			vulkan_state->device,
+			buffer_memory,
+			0, sizeof(RendererState),
+			0, &buffer_mapped);
+
+	// TODO(leo): Unmap and destroy buffers created here.
+
+	memcpy(buffer_mapped, data, width * height * component_count);
+
+	VkCommandBuffer temp_command_buffer = begin_temp_command_buffer(vulkan_state);
+
+	VkBufferImageCopy region = {
+		.bufferImageHeight = height,
+		.bufferRowLength = width,
+		.imageExtent.width = width,
+		.imageExtent.height = height,
+		.imageExtent.depth = 1,
+		.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.imageSubresource.layerCount = 1
+	};
+
+	vkCmdCopyBufferToImage(
+			temp_command_buffer,
+			buffer,
+			image,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1,
+			&region);
+
+	end_temp_command_buffer(vulkan_state, temp_command_buffer);
+
+	transition_image_layout(
+			vulkan_state,
+			image,
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	// Finalize
+	stbi_image_free(data);
+
+	Texture texture = {
+		.image = image,
+		.image_view = image_view
+	};
+
+	return texture;
+}
+
 MeshID get_mesh_id(const char* name) {
 	FOR(mesh_index, global->num_meshes) {
 		if (strcmp(global->mesh_names[mesh_index], name) != 0) {
@@ -23,6 +163,19 @@ MeshID get_mesh_id(const char* name) {
 	return 0;
 }
 
+TextureID get_texture_id(char* name) {
+	FOR(texture_index, global->num_textures) {
+		if (strcmp(global->texture_names[texture_index], name) != 0) {
+			continue;
+		}
+
+		return texture_index;
+	}
+
+	TRAP("Texture \"%s\" not found", name);
+	return 0;
+}
+
 Object* register_object(const char* name) {
 	ASSERT(strlen(name) <= NAME_LEN);
 	snprintf(global->object_names[global->num_objects], NAME_LEN, name);
@@ -32,7 +185,7 @@ Object* register_object(const char* name) {
 	object->scene_id = global->current_scene_id;
 	object->material = (Material){
 		.color = vec3(1, 1, 1),
-			.roughness = 0.5f
+		.roughness = 0.5f
 	};
 
 	return object;
@@ -621,6 +774,7 @@ void game_start() {
 	blue_sphere->material.color = vec3(1, 1, 1);
 	blue_sphere->position = vec3(-5, 2, -5);
 	blue_sphere->scale = vec3(2, 2, 2);
+	blue_sphere->material.texture_id = get_texture_id("test.png");
 
 	Object* green_light = register_object("green_light");
 	green_light->mesh_id = get_mesh_id("sphere.obj");
@@ -657,6 +811,50 @@ void game_init(
 
 	load_vulkan(vulkan_platform_data);
 
+	/*================================*/
+	/*      SET UP GAME INSTANCE      */
+	/*================================*/
+
+	if (!global->vulkan_state.is_initialized) {
+		global->vulkan_state = setup_renderer(vulkan_platform_data, platform_data->window_width, platform_data->window_height);
+		global->prev_compute_shader_modified_time = platform_get_file_modified_time("shaders/main.spv");
+		global->current_frame = 0;
+		global->current_render_mode = RM_NORMAL;
+
+		global->frame_arena = spawn_arena(mb(1));
+		push_arena(&global->frame_arena);
+
+		float focal_length = 1;
+		float viewport_height = 2;
+		float viewport_width = viewport_height * ((float)320 / 180);
+
+		Vec3 viewport_u = vec3(viewport_width, 0, 0);
+		Vec3 viewport_v = vec3(0, -viewport_height, 0);
+		Vec3 pixel_delta_u = vec3_div(viewport_u, 320);
+		Vec3 pixel_delta_v = vec3_div(viewport_v, 180);
+		Vec3 viewport_upper_left = vec3_sub(vec3(0, 0, -focal_length), vec3_add(vec3_div(viewport_u, 2), vec3_div(viewport_v, 2)));
+		Vec3 first_pixel_location = vec3_add(viewport_upper_left, vec3_scale(vec3_add(pixel_delta_u, pixel_delta_v), 0.5f));
+
+		global->renderer_state = (RendererState){
+			.sample_count = 4,
+			.pixel_delta_u = pixel_delta_u,
+			.pixel_delta_v = pixel_delta_v,
+			.first_pixel_location = first_pixel_location
+		};
+
+		// Set up camera
+		Mat4 camera_transform;
+
+		Mat4 translation = {
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, 5,
+			0, 0, 0, 1
+		};
+
+		global->renderer_state.camera_transform = translation;
+	}
+
 	/*==========================*/
 	/*       LOAD ASSETS        */
 	/*==========================*/
@@ -674,7 +872,7 @@ void game_init(
 	push_arena(&asset_temp_arena);
 
 	char path_buffer[256] = "assets/";
-	char** asset_names = platform_read_dir("assets\\*");
+	char** asset_names = platform_read_dir("assets\\*.obj");
 	global->triangle_buffer_size = 0;
 	global->bvh_buffer_size = 0;
 	for (int i = 0;; i++) {
@@ -743,60 +941,43 @@ void game_init(
 		global->bvh_buffer_size += num_bvh_nodes;
 	}
 
+	// Load textures
+	global->num_textures = 1;
+	char** texture_names = platform_read_dir("assets\\*.png");
+	for (int i = 0;; i++) {
+		char* current_texture_name = texture_names[i];
+		if (current_texture_name == NULL) {
+			break;
+		}
+
+		printf("\"%s\":\n", current_texture_name);
+
+		memcpy(path_buffer + 7, current_texture_name, strlen(current_texture_name) + 1);
+	
+		Texture texture = load_texture_from_file(&global->vulkan_state, path_buffer);
+
+		global->textures[global->num_textures] = texture;
+		ASSERT(strlen(current_texture_name) <= NAME_LEN);
+		snprintf(global->texture_names[global->num_textures], NAME_LEN, current_texture_name);
+		global->num_textures++;
+	}
+
 	pop_arena();
 	free_arena(&asset_temp_arena);
 
 	printf("Finished loading assets. Took %.2fms.\n\n", platform_get_time_ms() - loading_assets_start_time);
 
-	/*================================*/
-	/*      SET UP GAME INSTANCE      */
-	/*================================*/
 
-	if (!global->vulkan_state.is_initialized) {
-		global->vulkan_state = setup_renderer(vulkan_platform_data, platform_data->window_width, platform_data->window_height);
-		global->prev_compute_shader_modified_time = platform_get_file_modified_time("shaders/main.spv");
-		global->current_frame = 0;
-		global->current_render_mode = RM_NORMAL;
 
-		global->frame_arena = spawn_arena(mb(1));
-		push_arena(&global->frame_arena);
 
-		float focal_length = 1;
-		float viewport_height = 2;
-		float viewport_width = viewport_height * ((float)320 / 180);
 
-		Vec3 viewport_u = vec3(viewport_width, 0, 0);
-		Vec3 viewport_v = vec3(0, -viewport_height, 0);
-		Vec3 pixel_delta_u = vec3_div(viewport_u, 320);
-		Vec3 pixel_delta_v = vec3_div(viewport_v, 180);
-		Vec3 viewport_upper_left = vec3_sub(vec3(0, 0, -focal_length), vec3_add(vec3_div(viewport_u, 2), vec3_div(viewport_v, 2)));
-		Vec3 first_pixel_location = vec3_add(viewport_upper_left, vec3_scale(vec3_add(pixel_delta_u, pixel_delta_v), 0.5f));
-
-		global->renderer_state = (RendererState){
-			.sample_count = 4,
-			.pixel_delta_u = pixel_delta_u,
-			.pixel_delta_v = pixel_delta_v,
-			.first_pixel_location = first_pixel_location
-		};
-
-		// Set up camera
-		Mat4 camera_transform;
-
-		Mat4 translation = {
-			1, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 5,
-			0, 0, 0, 1
-		};
-
-		global->renderer_state.camera_transform = translation;
-
-		game_start();
-	}
+	game_start();
 
 	/*===============================*/
 	/*        SEND DATA TO GPU       */
 	/*===============================*/
+
+	// Buffers
 
 	memcpy(
 		(BVHNodeFlat*)global->vulkan_state.mesh_bvh_buffer.mapped,
@@ -824,5 +1005,29 @@ void game_init(
 			(GPUTriangle*)global->vulkan_state.triangle_buffer.mapped + i,
 			&gpu_triangle,
 			sizeof(GPUTriangle));
+	}
+
+	// Textures
+
+	VkDescriptorImageInfo image_infos[MAX_TEXTURE_COUNT];
+	for (int texture_index = 1; texture_index < global->num_textures; texture_index++) {
+		image_infos[texture_index - 1] = (VkDescriptorImageInfo){
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			.imageView = global->textures[texture_index].image_view,
+		};
+	}
+
+	FOR(frame_in_flight, MAX_FRAMES_IN_FLIGHT) {
+		VkWriteDescriptorSet texture_write_descriptor = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = global->vulkan_state.compute_descriptor_sets[frame_in_flight],
+			.dstBinding = 7,
+			.dstArrayElement = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			.descriptorCount = global->num_textures - 1,
+			.pImageInfo = image_infos
+		};
+
+		vkUpdateDescriptorSets(global->vulkan_state.device, 1, &texture_write_descriptor, 0, NULL);
 	}
 }

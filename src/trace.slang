@@ -135,7 +135,7 @@ float3 brdf_phong(float3 outgoing, float3 normal, float3 incoming, Material mate
 	float brdf = specular_factor * specular_part / specular_pdf + diffuse_factor * diffuse_part / diffuse_pdf;
 	//float brdf = specular_factor * specular_part + diffuse_factor * diffuse_part;
 
-	return material.color * brdf;// / pdf;
+	return brdf;// / pdf;
 }
 
 float pdf_phong(float3 outgoing, float3 normal) {
@@ -522,10 +522,9 @@ bool hit_mesh_bvh(
 		out_result.normal = normal;
 		out_result.point_hit = mul(float4(ray.start + ray.direction * closest_hit.t, 1), object.transform).xyz;
 
-		/*
+		out_result.tri = closest_hit.tri;
 		out_result.u = closest_hit.u;
 		out_result.v = closest_hit.v;
-		*/
 		out_result.object_index = object_index;
 		return true;
 	}

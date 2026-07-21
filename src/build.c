@@ -17,6 +17,9 @@ struct GlobalMemory_* global;
 #include "vulkan/vulkan.h"
 #include "vulkan_functions.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include "types.h"
 #include "assert.c"
 #include "platform.h"
